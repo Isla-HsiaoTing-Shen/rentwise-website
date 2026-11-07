@@ -1,3 +1,11 @@
+// ===== 0. Settings (change these numbers any time) =====
+const NEARBY_COUNT  = 5;     // how many nearby areas to show
+const NEARBY_MAX_KM = 50;    // only areas within this distance
+const NSW_BOUNDS    = [[-37.6, 140.9], [-28.1, 153.7]];   // mainland NSW
+const ORANGE = "#ea580c";    // your area
+const BLUE   = "#2563eb";    // nearby areas
+const GREY   = "#9ca3af";    // all other areas
+
 // ===== 1. Find the elements on the page =====
 const form           = document.getElementById("search-form");
 const whereField     = document.querySelector(".where-field");
@@ -8,6 +16,7 @@ const bedroomSelect  = document.getElementById("bedroom-select");
 const rentInput      = document.getElementById("rent-input");
 const checkButton    = document.getElementById("check-button");
 const resultBox      = document.getElementById("result");
+const mapNote        = document.getElementById("map-note");
 
 // ===== 2. Places to keep the data =====
 let postcodes = [];        // from postcodes.json (595 rows)
@@ -15,6 +24,10 @@ let benchmark = [];        // from benchmark.json (5,218 rows)
 let allCodes  = [];        // every postcode that has rent data (598)
 let places    = [];        // one row per suburb: { name: "Granville", postcode: "2142" }
 let selectedPlace = null;  // the suburb the user clicked
+
+let map;                   // the Leaflet map
+let greyLayer;             // all small grey dots
+let resultLayer;           // orange + blue dots after a search
 
 // ===== 3. Load the data =====
 async function loadData() {
@@ -33,6 +46,7 @@ async function loadData() {
 
     allCodes = [...new Set(benchmark.map(row => row.postcode))].sort();
     buildPlaces();
+    initMap();
 
     checkButton.disabled = false;
     checkButton.textContent = "Check my rent";
@@ -77,30 +91,14 @@ function suburbsOf(code) {
   return places.filter(p => p.postcode === code && p.name).map(p => p.name);
 }
 
+// first 3 suburbs: "Blaxcell, Camellia, Clyde, …"
+function shortSuburbs(code) {
+  const subs = suburbsOf(code);
+  return subs.slice(0, 3).join(", ") + (subs.length > 3 ? ", …" : "");
+}
+
 // ===== 5. Search list =====
 
-// find up to 8 suburbs that match what the user typed
-function searchPlaces(text) {
-  const q = text.trim().toLowerCase();
-  if (!q) return [];
-
-  let results;
-  if (/^\d+$/.test(q)) {
-    // typed numbers: search by postcode
-    results = places.filter(p => p.postcode.startsWith(q));
-  } else {
-    // typed letters: search by suburb name
-    results = places.filter(p => p.name.toLowerCase().includes(q));
-    // names that START with the text come first, then A–Z
-    results.sort((a, b) => {
-      const aStarts = a.name.toLowerCase().startsWith(q);
-      const bStarts = b.name.toLowerCase().startsWith(q);
-      if (aStarts !== bStarts) return aStarts ? -1 : 1;
-      return a.name.localeCompare(b.name);
-    });
-  }
-  return results.slice(0, 8);
-}
 // find up to 8 matches, only ONE row per postcode
 function searchPlaces(text) {
   const q = text.trim().toLowerCase();
@@ -157,13 +155,11 @@ function showSuggestions() {
   for (const place of results) {
     const li = document.createElement("li");
     if (place.name) {
-      // typed a suburb: "📍 Granville      2142"
       li.innerHTML = `
         <span>📍 ${place.name}</span>
         <span class="s-code">${place.postcode}</span>
       `;
     } else {
-      // typed a postcode: show which suburbs it includes
       const subs = suburbsOf(place.postcode);
       li.innerHTML = `
         <div class="s-main">
@@ -205,17 +201,153 @@ function getSelectedPlace() {
   const text = postcodeInput.value.trim().toLowerCase();
   if (!text) return null;
 
-  // typed a full postcode, e.g. "2142"
   if (/^\d{4}$/.test(text) && allCodes.includes(text)) {
     return { name: "", postcode: text };
   }
-  // typed a full suburb name, e.g. "granville"
   return places.find(p =>
     p.name.toLowerCase() === text || placeLabel(p).toLowerCase() === text
   ) || null;
 }
 
-// ===== 6. Small helper functions =====
+// ===== 6. Map =====
+
+// "2142" -> { lat: -33.8, lng: 151.0 } (or null if we have no coordinates)
+function getCoords(code) {
+  const info = postcodes.find(p => p.postcode === code);
+  if (!info || info.latitude == null || info.longitude == null) return null;
+  return { lat: Number(info.latitude), lng: Number(info.longitude) };
+}
+
+// Haversine formula: distance between two points on Earth, in km
+function distanceKm(lat1, lng1, lat2, lng2) {
+  const R = 6371;                                   // Earth radius in km
+  const toRad = degrees => degrees * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const a = Math.sin(dLat / 2) ** 2 +
+            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+function initMap() {
+  map = L.map("map", { scrollWheelZoom: false });   // page scrolling won't zoom the map
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 18,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+  }).addTo(map);
+  map.fitBounds(NSW_BOUNDS);
+
+  greyLayer   = L.layerGroup().addTo(map);
+  resultLayer = L.layerGroup().addTo(map);
+
+  // one small grey dot for every postcode; click = choose it
+  for (const p of postcodes) {
+    const coords = getCoords(p.postcode);
+    if (!coords) continue;
+    L.circleMarker([coords.lat, coords.lng], {
+      radius: 4, color: GREY, weight: 1, fillColor: GREY, fillOpacity: 0.6
+    })
+      .bindTooltip(`${p.postcode} · ${shortSuburbs(p.postcode)}`)
+      .on("click", () => choosePlace({ name: "", postcode: p.postcode }))
+      .addTo(greyLayer);
+  }
+}
+
+// the 5 closest areas with the same dwelling + bedrooms and 30+ leases
+function findNearby(code, dwelling, bedrooms) {
+  const home = getCoords(code);
+  if (!home) return [];
+
+  return benchmark
+    .filter(r =>
+      r.postcode !== code &&
+      r.dwelling_type === dwelling &&
+      r.bedroom_group === bedrooms &&
+      r.meets_min_sample === "Yes"
+    )
+    .map(r => {
+      const c = getCoords(r.postcode);
+      return c ? { row: r, coords: c, km: distanceKm(home.lat, home.lng, c.lat, c.lng) } : null;
+    })
+    .filter(item => item && item.km <= NEARBY_MAX_KM)
+    .sort((a, b) => a.km - b.km)
+    .slice(0, NEARBY_COUNT);
+}
+
+// the small window when you click a dot
+function popupHtml(title, subtitle, row, extra) {
+  return `
+    <strong>${title}</strong>
+    ${subtitle ? `<br><span class="popup-sub">${subtitle}</span>` : ""}
+    <br>Middle rent ${formatMoney(row.median_rent)}
+    <br>Usual range ${formatMoney(row.p25_rent)} – ${formatMoney(row.p75_rent)}
+    <br><span class="popup-sub">${extra}</span>
+  `;
+}
+
+function showOnMap(place, row, dwelling, bedrooms) {
+  resultLayer.clearLayers();
+  mapNote.hidden = true;
+
+  const home = getCoords(place.postcode);
+  if (!home) {
+    map.fitBounds(NSW_BOUNDS);
+    mapNote.textContent = "This postcode cannot be shown on the map.";
+    mapNote.hidden = false;
+    return;
+  }
+
+  const points = [[home.lat, home.lng]];
+
+  // blue dots: nearby areas, with the price always showing
+  const nearby = findNearby(place.postcode, dwelling, bedrooms);
+  for (const n of nearby) {
+    L.circleMarker([n.coords.lat, n.coords.lng], {
+      radius: 8, color: "white", weight: 2, fillColor: BLUE, fillOpacity: 1
+    })
+      .bindTooltip(formatMoney(n.row.median_rent), {
+        permanent: true, direction: "top", offset: [0, -8], className: "price-label"
+      })
+      .bindPopup(popupHtml(
+        `Postcode ${n.row.postcode}`,
+        shortSuburbs(n.row.postcode),
+        n.row,
+        `${n.km.toFixed(1)} km away · ${Number(n.row.sample_size).toLocaleString("en-AU")} new leases`
+      ))
+      .addTo(resultLayer);
+    points.push([n.coords.lat, n.coords.lng]);
+  }
+
+  // orange dot: your area (added last so it sits on top)
+  const homeMarker = L.circleMarker([home.lat, home.lng], {
+    radius: 11, color: "white", weight: 2, fillColor: ORANGE, fillOpacity: 1
+  }).addTo(resultLayer);
+
+  if (row) {
+    homeMarker
+      .bindTooltip(formatMoney(row.median_rent), {
+        permanent: true, direction: "top", offset: [0, -10], className: "price-label home"
+      })
+      .bindPopup(popupHtml(
+        `Your area: ${placeLabel(place)}`,
+        place.name ? "" : shortSuburbs(place.postcode),
+        row,
+        `${Number(row.sample_size).toLocaleString("en-AU")} new leases`
+      ));
+  } else {
+    homeMarker.bindPopup(`<strong>${placeLabel(place)}</strong><br>No data for this combination`);
+  }
+
+  // zoom so all orange + blue dots fit
+  map.fitBounds(points, { padding: [50, 50], maxZoom: 14 });
+
+  if (nearby.length === 0) {
+    mapNote.textContent = `No nearby areas within ${NEARBY_MAX_KM} km with enough data.`;
+    mapNote.hidden = false;
+  }
+}
+
+// ===== 7. Small helper functions =====
 
 // 1050 -> "$1,050"
 function formatMoney(amount) {
@@ -236,7 +368,7 @@ function showResult(type, html) {
   resultBox.hidden = false;
 }
 
-// ===== 7. When the button is clicked =====
+// ===== 8. When the button is clicked =====
 form.addEventListener("submit", function (event) {
   event.preventDefault();   // stop the page from reloading
 
@@ -245,7 +377,7 @@ form.addEventListener("submit", function (event) {
   const bedrooms = bedroomSelect.value;
   const rent     = Number(rentInput.value);
 
-  // 7a. Check the inputs
+  // 8a. Check the inputs
   if (!place) {
     showResult("error", "<p>Please choose a suburb or postcode from the list.</p>");
     return;
@@ -265,7 +397,7 @@ form.addEventListener("submit", function (event) {
 
   const code = place.postcode;
 
-  // 7b. Find the matching row (like SQL: WHERE postcode = ... AND ...)
+  // 8b. Find the matching row (like SQL: WHERE postcode = ... AND ...)
   const row = benchmark.find(r =>
     r.postcode === code &&
     r.dwelling_type === dwelling &&
@@ -285,6 +417,9 @@ form.addEventListener("submit", function (event) {
     </div>
   `;
 
+  // 8c. Update the map (works even if there is no data for this area)
+  showOnMap(place, row, dwelling, bedrooms);
+
   if (!row) {
     showResult("nodata", `
       <p class="verdict">No data for this combination</p>
@@ -294,7 +429,7 @@ form.addEventListener("submit", function (event) {
     return;
   }
 
-  // 7c. Compare the rent
+  // 8d. Compare the rent
   const p25    = Number(row.p25_rent);
   const median = Number(row.median_rent);
   const p75    = Number(row.p75_rent);
@@ -314,12 +449,12 @@ form.addEventListener("submit", function (event) {
     position = "above";
   }
 
-  // 7d. Warning for small samples (fewer than 30 lodgements)
+  // 8e. Warning for small samples (fewer than 30 lodgements)
   const warning = row.meets_min_sample === "Yes"
     ? ""
     : `<p class="warning">⚠️ Only ${row.sample_size} lodgements – use as a rough guide</p>`;
 
-  // 7e. Show the result
+  // 8f. Show the result
   showResult(type, `
     <p class="verdict">${verdict}</p>
     ${areaLine}
@@ -339,5 +474,6 @@ form.addEventListener("submit", function (event) {
   `);
 });
 
-// ===== 8. Start =====
+// ===== 9. Start =====
 loadData();
+

@@ -4,6 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>RentWise – Is your rent fair?</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -69,8 +70,14 @@
         <div id="result" class="result-card" hidden></div>
         <div class="placeholder">Nearby areas coming soon</div>
       </section>
+
       <section class="map-column">
-        <div id="map" class="placeholder">Map coming soon</div>
+        <div id="map"></div>
+        <div class="map-legend">
+          <span><span class="dot dot-home"></span>Your area</span>
+          <span><span class="dot dot-nearby"></span>Nearby areas</span>
+        </div>
+        <p id="map-note" class="map-note" hidden></p>
       </section>
     </div>
 
@@ -86,6 +93,7 @@
     <p>This is a guide only, not financial or legal advice.</p>
   </footer>
 
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="js/check.js"></script>
 </body>
 </html>
