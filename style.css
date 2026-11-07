@@ -231,3 +231,46 @@ footer p { margin: 4px 0; }
 /* ========== 10. Long suburb lists ========== */
 .area { margin-bottom: 8px; }
 .area-name { color: var(--text); font-weight: 700; }
+
+/* ========== 11. Where search list ========== */
+.where-field { position: relative; }
+
+.suggestions {
+  position: absolute;
+  top: calc(100% + 14px);   /* just below the search bar */
+  left: 0;
+  z-index: 1000;            /* on top of everything, including the map later */
+  width: 360px;
+  max-width: 90vw;
+  margin: 0;
+  padding: 8px;
+  list-style: none;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+}
+.suggestions li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.suggestions li:hover   { background: var(--bg-soft); }
+.suggestions .s-code    { color: var(--muted); }
+.suggestions .no-match  { color: var(--muted); cursor: default; }
+.suggestions .no-match:hover { background: none; }
+
+@media (max-width: 768px) {
+  .suggestions { width: auto; right: 0; top: calc(100% + 4px); }
+}
+.suggestions .s-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.suggestions .s-sub  {
+  font-size: 0.8rem;
+  color: var(--muted);
+  white-space: nowrap;       /* one line only */
+  overflow: hidden;
+  text-overflow: ellipsis;   /* too long -> "…" */
+}

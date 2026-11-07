@@ -26,12 +26,10 @@
 
     <!-- Search bar -->
     <form id="search-form" class="search-bar">
-
-      <div class="field">
+      <div class="field where-field">
         <label for="postcode-input">Where</label>
-        <input id="postcode-input" list="postcode-list"
-               placeholder="Search postcode or suburb" autocomplete="off">
-        <datalist id="postcode-list"></datalist>
+        <input id="postcode-input" placeholder="Search suburb or postcode" autocomplete="off">
+        <ul id="suggestions" class="suggestions" hidden></ul>
       </div>
 
       <div class="field">
