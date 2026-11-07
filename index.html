@@ -3,10 +3,91 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>RentWise</title>
+  <title>RentWise – Is your rent fair?</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <h1>RentWise</h1>
-  <p>Check if your rent is fair in NSW. Coming soon!</p>
+
+  <!-- Header -->
+  <header class="site-header">
+    <a href="index.html" class="logo">RentWise</a>
+    <nav>
+      <a href="index.html">Check my rent</a>
+      <a href="about.html">About</a>
+    </nav>
+  </header>
+
+  <main>
+    <!-- Intro -->
+    <section class="intro">
+      <h1>Is your rent fair?</h1>
+      <p>Compare your rent with recent new leases in your area</p>
+    </section>
+
+    <!-- Search bar -->
+    <form id="search-form" class="search-bar">
+
+      <div class="field">
+        <label for="postcode-input">Where</label>
+        <input id="postcode-input" list="postcode-list"
+               placeholder="Search postcode or suburb" autocomplete="off">
+        <datalist id="postcode-list"></datalist>
+      </div>
+
+      <div class="field">
+        <label for="dwelling-select">Dwelling type</label>
+        <select id="dwelling-select">
+          <option value="">Choose type</option>
+          <option value="Flat / Unit">Flat / Unit</option>
+          <option value="House">House</option>
+          <option value="Terrace / Townhouse / Semi-detached">Terrace / Townhouse</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="bedroom-select">Bedrooms</label>
+        <select id="bedroom-select">
+          <option value="">Choose bedrooms</option>
+          <option value="Studio">Studio</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4+">4 or more</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label for="rent-input">Weekly rent</label>
+        <input id="rent-input" type="number" min="1" step="1"
+               inputmode="numeric" placeholder="Enter your rent">
+      </div>
+
+      <button type="submit" id="check-button" disabled>Loading data…</button>
+    </form>
+
+    <!-- Results (left) + Map (right) -->
+    <div class="results-layout">
+      <section class="results-column">
+        <div id="result" class="result-card" hidden></div>
+        <div class="placeholder">Nearby areas coming soon</div>
+      </section>
+      <section class="map-column">
+        <div id="map" class="placeholder">Map coming soon</div>
+      </section>
+    </div>
+
+    <!-- Rent trend -->
+    <section class="trend">
+      <div class="placeholder">Rent trend coming soon</div>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer>
+    <p>Data: NSW Fair Trading rental bond lodgements, 2021–2025.</p>
+    <p>This is a guide only, not financial or legal advice.</p>
+  </footer>
+
+  <script src="js/check.js"></script>
 </body>
 </html>
