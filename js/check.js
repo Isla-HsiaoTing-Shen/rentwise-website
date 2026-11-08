@@ -4,7 +4,7 @@ const NEARBY_MAX_KM = 50;    // only areas within this distance
 const NSW_BOUNDS    = [[-37.6, 140.9], [-28.1, 153.7]];   // mainland NSW
 const ORANGE = "#ea580c";    // your area
 const BLUE   = "#2563eb";    // nearby areas
-const GREY   = "#9ca3af";    // all other areas
+const GREY   = "#6b7280";    // all other areas
 
 // ===== 1. Find the elements on the page =====
 const form           = document.getElementById("search-form");
@@ -19,11 +19,11 @@ const resultBox      = document.getElementById("result");
 const mapNote        = document.getElementById("map-note");
 
 // ===== 2. Places to keep the data =====
-let postcodes = [];        // from postcodes.json (595 rows)
-let benchmark = [];        // from benchmark.json (5,218 rows)
+let postcodes = [];        // postcodes.json: one row per postcode (595)
+let benchmark = [];        // benchmark.json: rent figures (5,218)
 let allCodes  = [];        // every postcode that has rent data (598)
-let places    = [];        // one row per suburb: { name: "Granville", postcode: "2142" }
-let selectedPlace = null;  // the suburb the user clicked
+let places    = [];        // suburbs.json: one row per suburb (5,214)
+let selectedPlace = null;  // the suburb or postcode the user chose
 
 let map;                   // the Leaflet map
 let greyLayer;             // all small grey dots
@@ -32,20 +32,30 @@ let resultLayer;           // orange + blue dots after a search
 // ===== 3. Load the data =====
 async function loadData() {
   try {
-    const [postcodeRes, benchmarkRes] = await Promise.all([
+    const [postcodeRes, benchmarkRes, suburbRes] = await Promise.all([
       fetch("data/postcodes.json"),
-      fetch("data/benchmark.json")
+      fetch("data/benchmark.json"),
+      fetch("data/suburbs.json")
     ]);
 
-    if (!postcodeRes.ok || !benchmarkRes.ok) {
+    if (!postcodeRes.ok || !benchmarkRes.ok || !suburbRes.ok) {
       throw new Error("Could not load the data files");
     }
 
     postcodes = await postcodeRes.json();
     benchmark = await benchmarkRes.json();
+    const suburbs = await suburbRes.json();
 
     allCodes = [...new Set(benchmark.map(row => row.postcode))].sort();
-    buildPlaces();
+
+    // { postcode, suburb, latitude, longitude } -> { name, postcode, lat, lng }
+    places = suburbs.map(s => ({
+      name: s.suburb,
+      postcode: s.postcode,
+      lat: s.latitude,
+      lng: s.longitude
+    }));
+
     initMap();
 
     checkButton.disabled = false;
@@ -57,29 +67,7 @@ async function loadData() {
   }
 }
 
-// ===== 4. Build the suburb list =====
-
-// "SOUTH GRANVILLE" -> "South Granville"
-function toTitleCase(text) {
-  return text.toLowerCase().replace(/\b\w/g, letter => letter.toUpperCase());
-}
-
-// "2142 – BLAXCELL, CAMELLIA, ..." -> one row per suburb
-function buildPlaces() {
-  for (const code of allCodes) {
-    const info  = postcodes.find(p => p.postcode === code);
-    const match = info ? info.postcode_label.match(/^\d{4}\s*[–-]\s*(.+)$/) : null;
-
-    if (!match) {                              // the 3 postcodes with no names
-      places.push({ name: "", postcode: code });
-      continue;
-    }
-    for (const suburb of match[1].split(",")) {
-      const name = suburb.trim();
-      if (name) places.push({ name: toTitleCase(name), postcode: code });
-    }
-  }
-}
+// ===== 4. Names =====
 
 // { name: "Granville", postcode: "2142" } -> "Granville, 2142"
 function placeLabel(place) {
@@ -88,7 +76,7 @@ function placeLabel(place) {
 
 // all suburb names in one postcode: "2142" -> ["Blaxcell", "Camellia", ...]
 function suburbsOf(code) {
-  return places.filter(p => p.postcode === code && p.name).map(p => p.name);
+  return places.filter(p => p.postcode === code).map(p => p.name);
 }
 
 // first 3 suburbs: "Blaxcell, Camellia, Clyde, …"
@@ -211,11 +199,20 @@ function getSelectedPlace() {
 
 // ===== 6. Map =====
 
-// "2142" -> { lat: -33.8, lng: 151.0 } (or null if we have no coordinates)
+// postcode point: "2142" -> { lat, lng } (or null)
 function getCoords(code) {
   const info = postcodes.find(p => p.postcode === code);
   if (!info || info.latitude == null || info.longitude == null) return null;
   return { lat: Number(info.latitude), lng: Number(info.longitude) };
+}
+
+// where to put the orange dot:
+// chose a suburb -> that suburb's own point; chose a postcode -> the postcode point
+function placeCoords(place) {
+  if (place.lat != null && place.lng != null) {
+    return { lat: Number(place.lat), lng: Number(place.lng) };
+  }
+  return getCoords(place.postcode);
 }
 
 // Haversine formula: distance between two points on Earth, in km
@@ -244,20 +241,18 @@ function initMap() {
   for (const p of postcodes) {
     const coords = getCoords(p.postcode);
     if (!coords) continue;
+    const subs = shortSuburbs(p.postcode);
     L.circleMarker([coords.lat, coords.lng], {
       radius: 4, color: GREY, weight: 1, fillColor: GREY, fillOpacity: 0.6
     })
-      .bindTooltip(`${p.postcode} · ${shortSuburbs(p.postcode)}`)
+      .bindTooltip(subs ? `${p.postcode} · ${subs}` : p.postcode)
       .on("click", () => choosePlace({ name: "", postcode: p.postcode }))
       .addTo(greyLayer);
   }
 }
 
-// the 5 closest areas with the same dwelling + bedrooms and 30+ leases
-function findNearby(code, dwelling, bedrooms) {
-  const home = getCoords(code);
-  if (!home) return [];
-
+// the 5 closest areas (from the orange dot) with the same dwelling + bedrooms and 30+ leases
+function findNearby(home, code, dwelling, bedrooms) {
   return benchmark
     .filter(r =>
       r.postcode !== code &&
@@ -289,7 +284,7 @@ function showOnMap(place, row, dwelling, bedrooms) {
   resultLayer.clearLayers();
   mapNote.hidden = true;
 
-  const home = getCoords(place.postcode);
+  const home = placeCoords(place);
   if (!home) {
     map.fitBounds(NSW_BOUNDS);
     mapNote.textContent = "This postcode cannot be shown on the map.";
@@ -300,7 +295,7 @@ function showOnMap(place, row, dwelling, bedrooms) {
   const points = [[home.lat, home.lng]];
 
   // blue dots: nearby areas, with the price always showing
-  const nearby = findNearby(place.postcode, dwelling, bedrooms);
+  const nearby = findNearby(home, place.postcode, dwelling, bedrooms);
   for (const n of nearby) {
     L.circleMarker([n.coords.lat, n.coords.lng], {
       radius: 8, color: "white", weight: 2, fillColor: BLUE, fillOpacity: 1
@@ -330,7 +325,7 @@ function showOnMap(place, row, dwelling, bedrooms) {
       })
       .bindPopup(popupHtml(
         `Your area: ${placeLabel(place)}`,
-        place.name ? "" : shortSuburbs(place.postcode),
+        place.name ? `Based on postcode ${place.postcode}` : shortSuburbs(place.postcode),
         row,
         `${Number(row.sample_size).toLocaleString("en-AU")} new leases`
       ));
@@ -449,12 +444,17 @@ form.addEventListener("submit", function (event) {
     position = "above";
   }
 
-  // 8e. Warning for small samples (fewer than 30 lodgements)
+  // 8e. Lowest / highest without extreme leases (P5 / P95): only when there are 30+ leases
+  const wideRange = (row.meets_min_sample === "Yes" && row.p05_rent != null)
+    ? `<p class="wide-range">Lowest ${formatMoney(row.p05_rent)} · Highest ${formatMoney(row.p95_rent)} (excluding extremes)</p>`
+    : "";
+
+  // 8f. Warning for small samples (fewer than 30 lodgements)
   const warning = row.meets_min_sample === "Yes"
     ? ""
     : `<p class="warning">⚠️ Only ${row.sample_size} lodgements – use as a rough guide</p>`;
 
-  // 8f. Show the result
+  // 8g. Show the result
   showResult(type, `
     <p class="verdict">${verdict}</p>
     ${areaLine}
@@ -469,6 +469,7 @@ form.addEventListener("submit", function (event) {
       </div>
     </div>
     <p>Your rent of ${formatMoney(rent)} a week is <strong class="position">${position}</strong> the usual range.</p>
+    ${wideRange}
     <p class="sample">Compared with ${Number(row.sample_size).toLocaleString("en-AU")} similar new leases from 2025.</p>
     ${warning}
   `);

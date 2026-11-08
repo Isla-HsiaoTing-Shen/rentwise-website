@@ -311,3 +311,6 @@ footer p { margin: 4px 0; }
 @media (max-width: 768px) {
   #map { height: 320px; }
 }
+
+
+.wide-range { color: var(--muted); font-size: 0.9rem; }
