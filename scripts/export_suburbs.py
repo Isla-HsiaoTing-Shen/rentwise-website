@@ -27,7 +27,13 @@ with open(CSV_FILE, encoding="utf-8-sig", newline="") as f:
             continue
 
         name = row["locality"].strip()
-        key = (postcode, name.upper())                 # no duplicates
+
+        # skip delivery centres ("WATERLOO DC"): mail centres, not suburbs people live in
+        if name.upper().endswith(" DC"):
+            continue
+
+        # "BRIGHTON-LE-SANDS" and "BRIGHTON LE SANDS" are the same place: treat them as one
+        key = (postcode, name.upper().replace("-", " "))   # no duplicates
         if key in suburbs:
             continue
 

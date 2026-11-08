@@ -16,6 +16,8 @@
    13. Phones (all rules for small screens, in one place)
 ============================================================================= */
 
+/* anything with the hidden attribute stays hidden, even if another rule says display: flex */
+[hidden] { display: none !important; }
 
 /* ========== 1. Colours and base (change colours in one place) ========== */
 :root {
