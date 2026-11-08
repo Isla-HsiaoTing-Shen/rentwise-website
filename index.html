@@ -82,8 +82,12 @@
     </div>
 
     <!-- Rent trend -->
-    <section class="trend">
-      <div class="placeholder">Rent trend coming soon</div>
+    <section class="trend" id="trend" hidden>
+      <h2>Rent trend</h2>
+      <p id="trend-title" class="trend-sub"></p>
+      <p class="trend-sub">Middle rent of new leases, 2021–2025</p>
+      <div class="trend-chart"><canvas id="trend-chart"></canvas></div>
+      <p id="trend-summary" class="trend-summary"></p>
     </section>
   </main>
 
@@ -94,6 +98,7 @@
   </footer>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
   <script src="js/check.js"></script>
 </body>
 </html>

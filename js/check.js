@@ -30,6 +30,9 @@ let map;                   // the Leaflet map
 let greyLayer;             // all small grey dots
 let resultLayer;           // orange + blue areas and dots after a search
 
+let trend = [];            // trend_yearly.json: median rent per postcode per year (30+ leases)
+let trendChart = null;     // the Chart.js line chart
+
 // ===== 3. Load the data =====
 async function loadData() {
   try {
@@ -393,6 +396,106 @@ function showOnMap(place, row, dwelling, bedrooms) {
   }
 }
 
+// ===== 6b. Rent trend chart =====
+
+// Trend data is an EXTRA: if this file fails, the rent check and map still work
+async function loadTrend() {
+  try {
+    const res = await fetch("data/trend_yearly.json");
+    if (!res.ok) throw new Error("Could not load trend_yearly.json");
+    trend = await res.json();
+    console.log("Loaded", trend.length, "trend rows");
+  } catch (error) {
+    console.warn("Trend data not loaded – the trend chart will be hidden.", error);
+  }
+}
+
+// every year from 2021 to 2025, so missing years show as gaps
+const TREND_YEARS = [2021, 2022, 2023, 2024, 2025];
+
+function showTrend(place, dwelling, bedrooms) {
+  const section  = document.getElementById("trend");
+  const titleEl  = document.getElementById("trend-title");
+  const summary  = document.getElementById("trend-summary");
+  const chartBox = document.querySelector(".trend-chart");
+
+  if (trend.length === 0) {           // trend.json did not load
+    section.hidden = true;
+    return;
+  }
+
+  section.hidden = false;
+  const basedOn = place.name ? ` · based on postcode ${place.postcode}` : "";
+  titleEl.textContent = `${placeLabel(place)} · ${dwelling} · ${bedroomText(bedrooms)}${basedOn}`;
+
+  // like SQL: WHERE postcode = ... AND dwelling_type = ... AND bedroom_group = ...
+  const rows = trend.filter(r =>
+    r.postcode === place.postcode &&
+    r.dwelling_type === dwelling &&
+    r.bedroom_group === bedrooms
+  );
+
+  if (rows.length < 2) {              // need at least 2 years to show a change
+    chartBox.hidden = true;
+    summary.textContent = "Not enough data for a trend in this area.";
+    if (trendChart) { trendChart.destroy(); trendChart = null; }
+    return;
+  }
+  chartBox.hidden = false;
+
+  // one value per year; null = fewer than 30 leases that year (a gap in the line)
+  const values = TREND_YEARS.map(year => {
+    const r = rows.find(row => Number(row.lodgement_year) === year);
+    return r ? Number(r.median_rent) : null;
+  });
+
+  // first and last years that have data
+  const firstIndex = values.findIndex(v => v !== null);
+  const lastIndex  = values.length - 1 - [...values].reverse().findIndex(v => v !== null);
+  const first = values[firstIndex];
+  const last  = values[lastIndex];
+  const change = Math.round((last - first) / first * 100);
+  const word = change > 0 ? `Up ${change}%` : change < 0 ? `Down ${Math.abs(change)}%` : "No change";
+  summary.textContent =
+    `${word} from ${TREND_YEARS[firstIndex]} to ${TREND_YEARS[lastIndex]} (${formatMoney(first)} → ${formatMoney(last)})`;
+
+  // draw the chart (remove the old one first)
+  if (trendChart) trendChart.destroy();
+  trendChart = new Chart(document.getElementById("trend-chart"), {
+    type: "line",
+    data: {
+      labels: TREND_YEARS.map(String),
+      datasets: [{
+        label: "Middle rent",
+        data: values,
+        borderColor: ORANGE,
+        backgroundColor: ORANGE,
+        borderWidth: 2,
+        pointRadius: 4,
+        tension: 0.2,
+        spanGaps: false               // do not join across missing years
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            title: items => items[0].label,                          // "2024"
+            label: item => `Middle rent ${formatMoney(item.raw)}`
+          }
+        }
+      },
+      scales: {
+        x: { grid: { display: false } },
+        y: { ticks: { callback: value => formatMoney(value) } }
+      }
+    }
+  });
+}
+
 // ===== 7. Small helper functions =====
 
 // 1050 -> "$1,050"
@@ -463,8 +566,9 @@ form.addEventListener("submit", function (event) {
     </div>
   `;
 
-  // 8c. Update the map (works even if there is no data for this area)
+  // 8c. Update the map and the trend chart (both work even if there is no data for this area)
   showOnMap(place, row, dwelling, bedrooms);
+  showTrend(place, dwelling, bedrooms);
 
   if (!row) {
     showResult("nodata", `
@@ -529,3 +633,4 @@ form.addEventListener("submit", function (event) {
 // ===== 9. Start =====
 loadData();
 loadAreas();   // runs at the same time; the map works even if this one fails
+loadTrend();   // runs at the same time; the rent check works even if this one fails

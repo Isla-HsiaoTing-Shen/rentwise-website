@@ -147,8 +147,8 @@ main {
 #map { min-height: 480px; }
 
 /* ========== 6. Trend ========== */
-.trend { margin-top: 24px; }
-.trend .placeholder { min-height: 240px; }
+
+
 
 /* ========== 7. Footer ========== */
 footer {
@@ -317,3 +317,21 @@ footer p { margin: 4px 0; }
 
 /* text under the numbers when hovering a map area */
 .hover-extra { color: var(--muted); font-size: 0.8rem; }
+
+
+/* ========== 13. Rent trend ========== */
+.trend {
+  margin-top: 24px;
+  padding: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+.trend h2       { margin: 0 0 4px; font-size: 1.25rem; }
+.trend-sub      { margin: 0; color: var(--muted); font-size: 0.9rem; }
+.trend-chart    { position: relative; height: 300px; margin: 16px 0 8px; }
+.trend-summary  { margin: 0; font-weight: 600; }
+
+@media (max-width: 768px) {
+  .trend-chart { height: 240px; }
+}
