@@ -23,11 +23,12 @@ let postcodes = [];        // postcodes.json: one row per postcode (595)
 let benchmark = [];        // benchmark.json: rent figures (5,218)
 let allCodes  = [];        // every postcode that has rent data (598)
 let places    = [];        // suburbs.json: one row per suburb (5,214)
+let areaShapes = {};       // postcode_areas.geojson: "2017" -> boundary shape (594)
 let selectedPlace = null;  // the suburb or postcode the user chose
 
 let map;                   // the Leaflet map
 let greyLayer;             // all small grey dots
-let resultLayer;           // orange + blue dots after a search
+let resultLayer;           // orange + blue areas and dots after a search
 
 // ===== 3. Load the data =====
 async function loadData() {
@@ -64,6 +65,21 @@ async function loadData() {
   } catch (error) {
     checkButton.textContent = "Data failed to load";
     console.error(error);
+  }
+}
+
+// Postcode boundaries are an EXTRA: if this file fails, the map still shows dots
+async function loadAreas() {
+  try {
+    const res = await fetch("data/postcode_areas.geojson");
+    if (!res.ok) throw new Error("Could not load postcode_areas.geojson");
+    const geo = await res.json();
+    for (const feature of geo.features) {
+      areaShapes[feature.properties.postcode] = feature;
+    }
+    console.log("Loaded", Object.keys(areaShapes).length, "postcode areas");
+  } catch (error) {
+    console.warn("Postcode areas not loaded – the map will show dots only.", error);
   }
 }
 
@@ -230,7 +246,8 @@ function initMap() {
   map = L.map("map", { scrollWheelZoom: false });   // page scrolling won't zoom the map
   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 18,
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' +
+                 ' | Postal areas: <a href="https://www.abs.gov.au/">ABS</a> (CC BY 4.0)'
   }).addTo(map);
   map.fitBounds(NSW_BOUNDS);
 
@@ -249,6 +266,16 @@ function initMap() {
       .on("click", () => choosePlace({ name: "", postcode: p.postcode }))
       .addTo(greyLayer);
   }
+}
+
+// colour one postcode area on the map (returns the layer, or null if we have no shape)
+function drawArea(code, colour, fillOpacity) {
+  const shape = areaShapes[code];
+  if (!shape) return null;
+  return L.geoJSON(shape, {
+    interactive: false,     // clicks go through to the dots
+    style: { color: colour, weight: 2, opacity: 0.8, fillColor: colour, fillOpacity: fillOpacity }
+  }).addTo(resultLayer);
 }
 
 // the 5 closest areas (from the orange dot) with the same dwelling + bedrooms and 30+ leases
@@ -292,10 +319,16 @@ function showOnMap(place, row, dwelling, bedrooms) {
     return;
   }
 
-  const points = [[home.lat, home.lng]];
-
-  // blue dots: nearby areas, with the price always showing
   const nearby = findNearby(home, place.postcode, dwelling, bedrooms);
+
+  // 1. areas first, so the dots sit on top of them
+  for (const n of nearby) {
+    drawArea(n.row.postcode, BLUE, 0.08);           // light blue: nearby postcodes
+  }
+  const homeArea = drawArea(place.postcode, ORANGE, 0.2);   // light orange: your postcode
+
+  // 2. blue dots: nearby areas, with the price always showing
+  const bounds = L.latLngBounds([[home.lat, home.lng]]);
   for (const n of nearby) {
     L.circleMarker([n.coords.lat, n.coords.lng], {
       radius: 8, color: "white", weight: 2, fillColor: BLUE, fillOpacity: 1
@@ -310,10 +343,10 @@ function showOnMap(place, row, dwelling, bedrooms) {
         `${n.km.toFixed(1)} km away · ${Number(n.row.sample_size).toLocaleString("en-AU")} new leases`
       ))
       .addTo(resultLayer);
-    points.push([n.coords.lat, n.coords.lng]);
+    bounds.extend([n.coords.lat, n.coords.lng]);
   }
 
-  // orange dot: your area (added last so it sits on top)
+  // 3. orange dot: your area (added last so it sits on top)
   const homeMarker = L.circleMarker([home.lat, home.lng], {
     radius: 11, color: "white", weight: 2, fillColor: ORANGE, fillOpacity: 1
   }).addTo(resultLayer);
@@ -333,8 +366,9 @@ function showOnMap(place, row, dwelling, bedrooms) {
     homeMarker.bindPopup(`<strong>${placeLabel(place)}</strong><br>No data for this combination`);
   }
 
-  // zoom so all orange + blue dots fit
-  map.fitBounds(points, { padding: [50, 50], maxZoom: 14 });
+  // 4. zoom so your whole postcode + all blue dots fit
+  if (homeArea) bounds.extend(homeArea.getBounds());
+  map.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
 
   if (nearby.length === 0) {
     mapNote.textContent = `No nearby areas within ${NEARBY_MAX_KM} km with enough data.`;
@@ -477,4 +511,5 @@ form.addEventListener("submit", function (event) {
 
 // ===== 9. Start =====
 loadData();
+loadAreas();   // runs at the same time; the map works even if this one fails
 
