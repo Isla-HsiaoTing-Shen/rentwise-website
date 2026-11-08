@@ -1,16 +1,39 @@
-// ===== 0. Settings (change these numbers any time) =====
-const NEARBY_COUNT  = 5;     // how many nearby areas to show
-const NEARBY_MAX_KM = 50;    // only areas within this distance
-const NSW_BOUNDS    = [[-37.6, 140.9], [-28.1, 153.7]];   // mainland NSW
-const ORANGE = "#ea580c";    // your area
-const BLUE   = "#2563eb";    // nearby areas
-const GREY   = "#6b7280";    // all other areas
+// =============================================================================
+// check.js – the home page (index.html): check my rent + nearby areas that fit
+// Needs common.js (loaded first): data, search list, map helpers, settings.
+//
+// One "Weekly rent" number is used two ways:
+//   1. the result card: is this rent lower than usual / about usual / higher?
+//   2. nearby areas: where does this amount fit as a budget?
+//
+// Nearby area rules:
+//   - same dwelling type + bedrooms, 30+ leases (meets_min_sample = 'Yes')
+//   - "Good chance": middle rent <= budget   (typical rent here fits)
+//   - "Possible":    usual range low end <= budget < middle rent (only cheaper places fit)
+//   - not shown:     budget < usual range low end
+//   - straight-line distance from your area: 5 km (default) or 10 km
+//   - Good chance first, then Possible; nearest first in each
+// =============================================================================
 
-// ===== 1. Find the elements on the page =====
+
+// ===== 1. Settings for this page =====
+const LIST_STEP = 5;         // the list shows 5 areas, then "Show 5 more"
+const DISTANCES = [5, 10];   // the distance buttons (same numbers as in index.html)
+
+// map colours: light green = Good chance, light yellow (dashed) = Possible, orange = your area
+// colour = the light fill, border/dot = a darker shade so the area is easy to see
+const LEVEL_STYLE = {
+  good:     { colour: "#4ade80", fill: 0.25, dot: "#16a34a", extra: { color: "#16a34a" } },
+  possible: { colour: "#fde047", fill: 0.35, dot: "#ca8a04", extra: { color: "#ca8a04", dashArray: "6 4" } }
+};
+
+// what the listing websites call each dwelling type
+const REA_TYPE    = { "Flat / Unit": "unit+apartment", "House": "house", "Terrace / Townhouse / Semi-detached": "townhouse" };
+const DOMAIN_TYPE = { "Flat / Unit": "apartment-unit-flat", "House": "house", "Terrace / Townhouse / Semi-detached": "town-house" };
+
+
+// ===== 2. Find the elements on the page =====
 const form           = document.getElementById("search-form");
-const whereField     = document.querySelector(".where-field");
-const postcodeInput  = document.getElementById("postcode-input");
-const suggestionsBox = document.getElementById("suggestions");
 const dwellingSelect = document.getElementById("dwelling-select");
 const bedroomSelect  = document.getElementById("bedroom-select");
 const rentInput      = document.getElementById("rent-input");
@@ -18,309 +41,48 @@ const checkButton    = document.getElementById("check-button");
 const resultBox      = document.getElementById("result");
 const mapNote        = document.getElementById("map-note");
 
-// ===== 2. Places to keep the data =====
-let postcodes = [];        // postcodes.json: one row per postcode (595)
-let benchmark = [];        // benchmark.json: rent figures (5,218)
-let allCodes  = [];        // every postcode that has rent data (598)
-let places    = [];        // suburbs.json: one row per suburb (5,214)
-let areaShapes = {};       // postcode_areas.geojson: "2017" -> boundary shape (594)
-let selectedPlace = null;  // the suburb or postcode the user chose
-
-let map;                   // the Leaflet map
-let greyLayer;             // all small grey dots
-let resultLayer;           // orange + blue areas and dots after a search
+const nearbyBox      = document.getElementById("nearby");
+const countTitle     = document.getElementById("find-count");
+const messageBox     = document.getElementById("find-message");
+const listBox        = document.getElementById("find-list");
+const showMoreButton = document.getElementById("show-more");
 
 let trend = [];            // trend_yearly.json: median rent per postcode per year (30+ leases)
 let trendChart = null;     // the Chart.js line chart
 
-// ===== 3. Load the data =====
-async function loadData() {
-  try {
-    const [postcodeRes, benchmarkRes, suburbRes] = await Promise.all([
-      fetch("data/postcodes.json"),
-      fetch("data/benchmark.json"),
-      fetch("data/suburbs.json")
-    ]);
+let maxKm = 5;             // chosen distance (5 km when the page opens)
+let lastSearch = null;     // { place, dwelling, bedrooms, rent, row } so the distance buttons can redo it
+let lastResults = [];      // every nearby area that fits, in list order
+let listLimit = LIST_STEP; // how many of them the list is showing
+let shownLayers = {};      // postcode -> { area, dot } on the map, to highlight from the list
 
-    if (!postcodeRes.ok || !benchmarkRes.ok || !suburbRes.ok) {
-      throw new Error("Could not load the data files");
-    }
+document.querySelectorAll(".latest-year").forEach(el => el.textContent = LATEST_YEAR);
 
-    postcodes = await postcodeRes.json();
-    benchmark = await benchmarkRes.json();
-    const suburbs = await suburbRes.json();
 
-    allCodes = [...new Set(benchmark.map(row => row.postcode))].sort();
+// ===== 3. Result card =====
 
-    // { postcode, suburb, latitude, longitude } -> { name, postcode, lat, lng }
-    places = suburbs.map(s => ({
-      name: s.suburb,
-      postcode: s.postcode,
-      lat: s.latitude,
-      lng: s.longitude
-    }));
-
-    initMap();
-
-    checkButton.disabled = false;
-    checkButton.textContent = "Check my rent";
-    console.log("Loaded", postcodes.length, "postcodes,", benchmark.length, "benchmark rows,", places.length, "suburbs");
-  } catch (error) {
-    checkButton.textContent = "Data failed to load";
-    console.error(error);
-  }
+// show the result card with a colour type
+function showResult(type, html) {
+  resultBox.className = "result-card " + type;
+  resultBox.innerHTML = html;
+  resultBox.hidden = false;
 }
 
-// Postcode boundaries are an EXTRA: if this file fails, the map still shows dots
-async function loadAreas() {
-  try {
-    const res = await fetch("data/postcode_areas.geojson");
-    if (!res.ok) throw new Error("Could not load postcode_areas.geojson");
-    const geo = await res.json();
-    for (const feature of geo.features) {
-      areaShapes[feature.properties.postcode] = feature;
-    }
-    console.log("Loaded", Object.keys(areaShapes).length, "postcode areas");
-    if (greyLayer) drawGreyDots();   // map already drawn: move the grey dots inside their areas
-  } catch (error) {
-    console.warn("Postcode areas not loaded – the map will show dots only.", error);
-  }
+
+// ===== 4. Nearby areas that fit the rent (as a budget) =====
+
+// "good" / "possible" / null (too expensive)
+function affordability(row, budget) {
+  if (Number(row.median_rent) <= budget) return "good";
+  if (Number(row.p25_rent)    <= budget) return "possible";
+  return null;
 }
 
-// ===== 4. Names =====
-
-// { name: "Granville", postcode: "2142" } -> "Granville, 2142"
-function placeLabel(place) {
-  return place.name ? `${place.name}, ${place.postcode}` : `Postcode ${place.postcode}`;
-}
-
-// all suburb names in one postcode: "2142" -> ["Blaxcell", "Camellia", ...]
-function suburbsOf(code) {
-  return places.filter(p => p.postcode === code).map(p => p.name);
-}
-
-// first 3 suburbs: "Blaxcell, Camellia, Clyde, …"
-function shortSuburbs(code) {
-  const subs = suburbsOf(code);
-  return subs.slice(0, 3).join(", ") + (subs.length > 3 ? ", …" : "");
-}
-
-// ===== 5. Search list =====
-
-// find up to 8 matches, only ONE row per postcode
-function searchPlaces(text) {
-  const q = text.trim().toLowerCase();
-  if (!q) return [];
-
-  // typed numbers: one row per postcode
-  if (/^\d+$/.test(q)) {
-    return allCodes
-      .filter(code => code.startsWith(q))
-      .slice(0, 8)
-      .map(code => ({ name: "", postcode: code }));
-  }
-
-  // typed letters: search by suburb name
-  const matches = places.filter(p => p.name.toLowerCase().includes(q));
-
-  // names that START with the text come first, then A–Z
-  matches.sort((a, b) => {
-    const aStarts = a.name.toLowerCase().startsWith(q);
-    const bStarts = b.name.toLowerCase().startsWith(q);
-    if (aStarts !== bStarts) return aStarts ? -1 : 1;
-    return a.name.localeCompare(b.name);
-  });
-
-  // keep only the best match for each postcode
-  const seen = new Set();
-  const results = [];
-  for (const place of matches) {
-    if (!seen.has(place.postcode)) {
-      seen.add(place.postcode);
-      results.push(place);
-    }
-  }
-  return results.slice(0, 8);
-}
-
-function showSuggestions() {
-  suggestionsBox.innerHTML = "";
-
-  if (postcodeInput.value.trim() === "") {
-    suggestionsBox.hidden = true;
-    return;
-  }
-
-  const results = searchPlaces(postcodeInput.value);
-
-  if (results.length === 0) {
-    const li = document.createElement("li");
-    li.className = "no-match";
-    li.textContent = "No matching suburb or postcode";
-    suggestionsBox.appendChild(li);
-  }
-
-  for (const place of results) {
-    const li = document.createElement("li");
-    if (place.name) {
-      li.innerHTML = `
-        <span>📍 ${place.name}</span>
-        <span class="s-code">${place.postcode}</span>
-      `;
-    } else {
-      const subs = suburbsOf(place.postcode);
-      li.innerHTML = `
-        <div class="s-main">
-          <span>📍 Postcode ${place.postcode}</span>
-          ${subs.length ? `<span class="s-sub">${subs.join(", ")}</span>` : ""}
-        </div>
-      `;
-    }
-    li.addEventListener("click", () => choosePlace(place));
-    suggestionsBox.appendChild(li);
-  }
-
-  suggestionsBox.hidden = false;
-}
-
-function choosePlace(place) {
-  selectedPlace = place;
-  postcodeInput.value = placeLabel(place);
-  suggestionsBox.hidden = true;
-}
-
-// when the user types: forget the old choice and show the list
-postcodeInput.addEventListener("input", () => {
-  selectedPlace = null;
-  showSuggestions();
-});
-
-// click anywhere outside "Where": close the list
-document.addEventListener("click", (event) => {
-  if (!whereField.contains(event.target)) {
-    suggestionsBox.hidden = true;
-  }
-});
-
-// if the user typed without clicking the list, try to understand it
-function getSelectedPlace() {
-  if (selectedPlace) return selectedPlace;
-
-  const text = postcodeInput.value.trim().toLowerCase();
-  if (!text) return null;
-
-  if (/^\d{4}$/.test(text) && allCodes.includes(text)) {
-    return { name: "", postcode: text };
-  }
-  return places.find(p =>
-    p.name.toLowerCase() === text || placeLabel(p).toLowerCase() === text
-  ) || null;
-}
-
-// ===== 6. Map =====
-
-// postcode point: "2142" -> { lat, lng } (or null)
-// 1st choice: a point that is always INSIDE the postcode area (from postcode_areas.geojson)
-// 2nd choice: the point in postcodes.json (can be outside, e.g. 2000 is in the harbour)
-function getCoords(code) {
-  const shape = areaShapes[code];
-  if (shape && shape.properties.lat != null) {
-    return { lat: shape.properties.lat, lng: shape.properties.lng };
-  }
-  const info = postcodes.find(p => p.postcode === code);
-  if (!info || info.latitude == null || info.longitude == null) return null;
-  return { lat: Number(info.latitude), lng: Number(info.longitude) };
-}
-
-// where to put the orange dot:
-// chose a suburb -> that suburb's own point; chose a postcode -> the postcode point
-function placeCoords(place) {
-  if (place.lat != null && place.lng != null) {
-    return { lat: Number(place.lat), lng: Number(place.lng) };
-  }
-  return getCoords(place.postcode);
-}
-
-// Haversine formula: distance between two points on Earth, in km
-function distanceKm(lat1, lng1, lat2, lng2) {
-  const R = 6371;                                   // Earth radius in km
-  const toRad = degrees => degrees * Math.PI / 180;
-  const dLat = toRad(lat2 - lat1);
-  const dLng = toRad(lng2 - lng1);
-  const a = Math.sin(dLat / 2) ** 2 +
-            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(a));
-}
-
-function initMap() {
-  map = L.map("map", { scrollWheelZoom: true });    // mouse wheel zooms the map
-  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 18,
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' +
-                 ' | Postal areas: <a href="https://www.abs.gov.au/">ABS</a> (CC BY 4.0)'
-  }).addTo(map);
-  map.fitBounds(NSW_BOUNDS);
-
-  greyLayer   = L.layerGroup().addTo(map);
-  resultLayer = L.layerGroup().addTo(map);
-  drawGreyDots();
-}
-
-// one small grey dot for every postcode; click = choose it
-// (drawn again when postcode_areas.geojson arrives, so the dots sit inside their areas)
-function drawGreyDots() {
-  greyLayer.clearLayers();
-  for (const p of postcodes) {
-    const coords = getCoords(p.postcode);
-    if (!coords) continue;
-    const subs = shortSuburbs(p.postcode);
-    L.circleMarker([coords.lat, coords.lng], {
-      radius: 4, color: GREY, weight: 1, fillColor: GREY, fillOpacity: 0.6
-    })
-      .bindTooltip(subs ? `${p.postcode} · ${subs}` : p.postcode)
-      .on("click", () => choosePlace({ name: "", postcode: p.postcode }))
-      .addTo(greyLayer);
-  }
-}
-
-// colour one postcode area on the map (returns the layer, or null if we have no shape)
-// infoHtml: text to show when the mouse is over the area
-// onClick:  what to do when the area is clicked (leave it out = not clickable)
-function drawArea(code, colour, fillOpacity, infoHtml, onClick) {
-  const shape = areaShapes[code];
-  if (!shape) return null;
-  const layer = L.geoJSON(shape, {
-    style: { color: colour, weight: 2, opacity: 0.8, fillColor: colour, fillOpacity: fillOpacity }
-  }).addTo(resultLayer);
-  layer.bindTooltip(infoHtml, { sticky: true, className: "hover-info" });   // follows the mouse
-  if (onClick) layer.on("click", onClick);
-  return layer;
-}
-
-// dots already have a price label, so show the info as a popup while the mouse is over them
-function showInfoOnHover(marker, infoHtml) {
-  marker.bindPopup(infoHtml, { closeButton: false, autoPan: false, offset: [0, -6] });
-  marker.on("mouseover", () => marker.openPopup());
-  marker.on("mouseout",  () => marker.closePopup());
-}
-
-// clicked a blue area: put that postcode in "Where" and check again
-// (dwelling type, bedrooms and rent stay the same)
-function checkArea(code) {
-  choosePlace({ name: "", postcode: code });
-  form.requestSubmit();
-
-  // on phones the card is above the map, so scroll up to show the new result
-  if (window.innerWidth <= 768) {
-    resultBox.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-}
-
-// the 5 closest areas (from the orange dot) with the same dwelling + bedrooms and 30+ leases
-function findNearby(home, code, dwelling, bedrooms) {
+// every reliable area with the same dwelling + bedrooms, with its distance from "home"
+// like SQL: WHERE dwelling_type = ... AND bedroom_group = ... AND meets_min_sample = 'Yes'
+function reliableAreas(home, dwelling, bedrooms) {
   return benchmark
     .filter(r =>
-      r.postcode !== code &&
       r.dwelling_type === dwelling &&
       r.bedroom_group === bedrooms &&
       r.meets_min_sample === "Yes"
@@ -329,26 +91,191 @@ function findNearby(home, code, dwelling, bedrooms) {
       const c = getCoords(r.postcode);
       return c ? { row: r, coords: c, km: distanceKm(home.lat, home.lng, c.lat, c.lng) } : null;
     })
-    .filter(item => item && item.km <= NEARBY_MAX_KM)
-    .sort((a, b) => a.km - b.km)
-    .slice(0, NEARBY_COUNT);
+    .filter(item => item !== null);
 }
 
-// the info shown on the map (short: the card has the details)
-function popupHtml(title, row, extra) {
+// OTHER areas within the distance that fit: Good chance first, then Possible, nearest first
+function findAreas(code, home, dwelling, bedrooms, budget) {
+  const all = reliableAreas(home, dwelling, bedrooms);
+
+  const fits = all
+    .filter(a => a.km <= maxKm && a.row.postcode !== code)
+    .map(a => ({ ...a, level: affordability(a.row, budget) }))
+    .filter(a => a.level !== null);
+
+  // like SQL: ORDER BY level, km
+  fits.sort((a, b) => {
+    if (a.level !== b.level) return a.level === "good" ? -1 : 1;
+    return a.km - b.km;
+  });
+
+  return { results: fits, all };
+}
+
+// nothing fits: work out what the user could change
+function suggestionText(all, budget) {
+  const tips = [];
+
+  // a bigger distance that has results
+  for (const km of DISTANCES) {
+    if (km <= maxKm) continue;
+    if (all.some(a => a.km <= km && affordability(a.row, budget))) {
+      tips.push(`<button type="button" class="link-button" data-km="${km}">${km} km</button>`);
+      break;
+    }
+  }
+
+  // the budget needed for at least one area at this distance ("Possible" = usual range low end)
+  const near = all.filter(a => a.km <= maxKm && a.row.postcode !== lastSearch.place.postcode);
+  if (near.length) {
+    const lowest = Math.min(...near.map(a => Number(a.row.p25_rent)));
+    tips.push(`a budget of ${formatMoney(lowest)}`);
+  }
+
+  return tips.length ? `Try ${tips.join(", or ")}.` : "Try another dwelling type or number of bedrooms.";
+}
+
+// realestate.com.au: .../rent/property-house-with-3-bedrooms-between-0-700-in-2160/list-1
+// (studio cannot be filtered there, so it only filters type and price)
+function reaLink(code, dwelling, bedrooms, budget) {
+  const bed = bedrooms === "Studio" ? "" : `-with-${parseInt(bedrooms)}-bedrooms`;
+  return `https://www.realestate.com.au/rent/property-${REA_TYPE[dwelling]}${bed}-between-0-${budget}-in-${code}/list-1`;
+}
+
+// Domain: .../rent/?postcode=2160&ptype=house&bedrooms=3&price=0-700
+function domainLink(code, dwelling, bedrooms, budget) {
+  const bed = bedrooms === "Studio" ? "0" : bedrooms === "4+" ? "4-any" : bedrooms;
+  return `https://www.domain.com.au/rent/?postcode=${code}&ptype=${DOMAIN_TYPE[dwelling]}&bedrooms=${bed}&price=0-${budget}`;
+}
+
+function badgeHtml(level) {
+  if (level === "good")     return `<span class="badge good">Good chance</span>`;
+  if (level === "possible") return `<span class="badge possible">Possible</span>`;
+  return `<span class="badge over">Above budget</span>`;
+}
+
+function rentalLinks(code, dwelling, bedrooms, budget) {
   return `
-    <strong>${title}</strong>
-    <br>Middle rent ${formatMoney(row.median_rent)}
-    <br>Usual range ${formatMoney(row.p25_rent)} – ${formatMoney(row.p75_rent)}
-    ${extra ? `<br><span class="hover-extra">${extra}</span>` : ""}
+    <div class="area-result-links">
+      Search rentals:
+      <a href="${reaLink(code, dwelling, bedrooms, budget)}" target="_blank" rel="noopener">Realestate ↗</a> ·
+      <a href="${domainLink(code, dwelling, bedrooms, budget)}" target="_blank" rel="noopener">Domain ↗</a>
+    </div>
   `;
 }
 
-function showOnMap(place, row, dwelling, bedrooms) {
-  resultLayer.clearLayers();
-  mapNote.hidden = true;
+function resultCard(a, index, dwelling, bedrooms, budget) {
+  const code = a.row.postcode;
+  const subs = suburbsOf(code).join(", ");   // ALL suburbs (wraps onto more lines if long)
+
+  return `
+    <li class="area-result" data-postcode="${code}">
+      <div class="area-result-top">
+        <span class="area-result-code">${index + 1}. ${code}</span>
+        ${badgeHtml(a.level)}
+      </div>
+      ${subs ? `<div class="area-result-name">${subs}</div>` : ""}
+      <div class="area-result-numbers">
+        Middle rent <strong>${formatMoney(a.row.median_rent)}</strong>
+        · Usual range ${formatMoney(a.row.p25_rent)} – ${formatMoney(a.row.p75_rent)}
+      </div>
+      ${rentalLinks(code, dwelling, bedrooms, budget)}
+    </li>
+  `;
+}
+
+// the list shows the first "listLimit" areas, plus a "Show 5 more" button if there are more
+function showList() {
+  const { dwelling, bedrooms, rent } = lastSearch;
+  const shown = lastResults.slice(0, listLimit);
+  listBox.innerHTML = shown.map((a, i) => resultCard(a, i, dwelling, bedrooms, rent)).join("");
+
+  // click a card (not a link) = show that area on the map (your area stays the same)
+  listBox.querySelectorAll(".area-result").forEach(li => {
+    li.addEventListener("click", event => {
+      if (event.target.closest("a")) return;
+      highlight(li.dataset.postcode, true);
+    });
+  });
+
+  const left = lastResults.length - shown.length;
+  showMoreButton.hidden = left <= 0;
+  showMoreButton.textContent = `Show ${Math.min(LIST_STEP, left)} more`;
+}
+
+// work out the nearby areas, then show the list and the map
+function showNearby() {
+  const { place, dwelling, bedrooms, rent, row } = lastSearch;
+
+  messageBox.hidden = true;
+  showMoreButton.hidden = true;
+  listBox.innerHTML = "";
+  listLimit = LIST_STEP;
 
   const home = placeCoords(place);
+  if (!home) {
+    nearbyBox.hidden = true;
+    lastResults = [];
+    showOnMap(place, row, null);
+    return;
+  }
+
+  const { results, all } = findAreas(place.postcode, home, dwelling, bedrooms, rent);
+  lastResults = results;
+  nearbyBox.hidden = false;
+
+  if (results.length === 0) {
+    countTitle.textContent = `No other areas within ${maxKm} km fit ${formatMoney(rent)} a week`;
+    messageBox.className = "find-message none";
+    messageBox.innerHTML = `<p>${suggestionText(all, rent)}</p>`;
+    messageBox.hidden = false;
+  } else {
+    countTitle.textContent = `${results.length} other area${results.length > 1 ? "s" : ""} within ${maxKm} km ` +
+                             `may fit ${formatMoney(rent)} a week`;
+    showList();
+  }
+
+  showOnMap(place, row, home);
+}
+
+
+// ===== 5. Map: your area + nearby areas that fit =====
+// Clicking a nearby area does NOT change "Where": you still want to live near your area,
+// you are just looking. Map click -> the card in the list. Card click -> the area on the map.
+
+// make one nearby area stand out in the list (and on the map if moveMap)
+function highlight(code, moveMap) {
+  listBox.querySelectorAll(".area-result").forEach(li =>
+    li.classList.toggle("selected", li.dataset.postcode === code));
+
+  const shown = shownLayers[code];
+  if (moveMap && shown) {
+    if (shown.area) map.fitBounds(shown.area.getBounds(), { padding: [60, 60], maxZoom: 14 });
+    if (shown.dot) shown.dot.openPopup();
+  }
+}
+
+// clicked a nearby area on the map: show its card (open more of the list if needed)
+function showInList(code) {
+  const index = lastResults.findIndex(a => a.row.postcode === code);
+  if (index >= listLimit) {
+    const { place, row } = lastSearch;
+    listLimit = Math.ceil((index + 1) / LIST_STEP) * LIST_STEP;
+    showList();
+    showOnMap(place, row, placeCoords(place), false);
+  }
+  highlight(code, false);
+  const li = listBox.querySelector(`.area-result[data-postcode="${code}"]`);
+  if (li) li.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+// every nearby area that fits is shaded green / yellow; the areas in the list also get a price dot
+// refit = true: zoom the map to show all of them (not when "Show more" is pressed)
+function showOnMap(place, row, home, refit = true) {
+  resultLayer.clearLayers();
+  shownLayers = {};
+  mapNote.hidden = true;
+
   if (!home) {
     map.fitBounds(NSW_BOUNDS);
     mapNote.textContent = "This postcode cannot be shown on the map.";
@@ -356,59 +283,49 @@ function showOnMap(place, row, dwelling, bedrooms) {
     return;
   }
 
-  const nearby = findNearby(home, place.postcode, dwelling, bedrooms);
-
-  // info shown when the mouse is over your area
+  // 1. areas first, so the dots sit on top of them
+  for (const a of lastResults) {
+    const s = LEVEL_STYLE[a.level];
+    const info = popupHtml(`Postcode ${a.row.postcode}`, a.row, `${a.km.toFixed(1)} km away`);
+    const area = drawArea(a.row.postcode, s.colour, s.fill, info, () => showInList(a.row.postcode), s.extra);
+    shownLayers[a.row.postcode] = { area };
+  }
   const homeInfo = row
     ? popupHtml(`Your area: ${placeLabel(place)}`, row)
     : `<strong>${placeLabel(place)}</strong><br>No data for this combination`;
+  const homeArea = drawArea(place.postcode, ORANGE, 0.2, homeInfo);
 
-  // 1. areas first, so the dots sit on top of them
-  for (const n of nearby) {
-    // light blue: nearby postcodes (hover = info, click = check this area)
-    const info = popupHtml(`Postcode ${n.row.postcode}`, n.row, `${n.km.toFixed(1)} km away`);
-    drawArea(n.row.postcode, BLUE, 0.08, info, () => checkArea(n.row.postcode));
-  }
-  const homeArea = drawArea(place.postcode, ORANGE, 0.2, homeInfo);   // light orange: your postcode
-
-  // 2. blue dots: nearby areas, with the price always showing (hover = info, click = check this area)
-  const bounds = L.latLngBounds([[home.lat, home.lng]]);
-  for (const n of nearby) {
-    const dot = L.circleMarker([n.coords.lat, n.coords.lng], {
-      radius: 8, color: "white", weight: 2, fillColor: BLUE, fillOpacity: 1
-    })
-      .bindTooltip(formatMoney(n.row.median_rent), {
-        permanent: true, direction: "top", offset: [0, -8], className: "price-label"
-      })
-      .on("click", () => checkArea(n.row.postcode))
-      .addTo(resultLayer);
-    showInfoOnHover(dot, popupHtml(`Postcode ${n.row.postcode}`, n.row, `${n.km.toFixed(1)} km away`));
-    bounds.extend([n.coords.lat, n.coords.lng]);
+  // 2. price dots for the areas in the list
+  for (const a of lastResults.slice(0, listLimit)) {
+    const dot = drawPriceDot(a.coords, LEVEL_STYLE[a.level].dot, 8, formatMoney(a.row.median_rent), "price-label");
+    dot.on("click", () => showInList(a.row.postcode));
+    showInfoOnHover(dot, popupHtml(`Postcode ${a.row.postcode}`, a.row, `${a.km.toFixed(1)} km away`));
+    shownLayers[a.row.postcode].dot = dot;
   }
 
   // 3. orange dot: your area (added last so it sits on top)
-  const homeMarker = L.circleMarker([home.lat, home.lng], {
-    radius: 11, color: "white", weight: 2, fillColor: ORANGE, fillOpacity: 1
-  }).addTo(resultLayer);
+  const homeDot = drawPriceDot(home, ORANGE, 11, row ? formatMoney(row.median_rent) : null, "price-label home");
+  showInfoOnHover(homeDot, homeInfo);
 
-  if (row) {
-    homeMarker.bindTooltip(formatMoney(row.median_rent), {
-      permanent: true, direction: "top", offset: [0, -10], className: "price-label home"
-    });
-  }
-  showInfoOnHover(homeMarker, homeInfo);
-
-  // 4. zoom so your whole postcode + all blue dots fit
-  if (homeArea) bounds.extend(homeArea.getBounds());
-  map.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
-
-  if (nearby.length === 0) {
-    mapNote.textContent = `No nearby areas within ${NEARBY_MAX_KM} km with enough data.`;
-    mapNote.hidden = false;
+  // 4. zoom so your whole postcode + every nearby area that fits can be seen
+  if (refit) {
+    const bounds = L.latLngBounds([[home.lat, home.lng]]);
+    if (homeArea) bounds.extend(homeArea.getBounds());
+    for (const a of lastResults) bounds.extend([a.coords.lat, a.coords.lng]);
+    map.fitBounds(bounds, { padding: [50, 50], maxZoom: 14 });
   }
 }
 
-// ===== 6b. Rent trend chart =====
+// "Show 5 more": longer list + price dots for the new areas (the map does not move)
+function showMore() {
+  const { place, row } = lastSearch;
+  listLimit += LIST_STEP;
+  showList();
+  showOnMap(place, row, placeCoords(place), false);
+}
+
+
+// ===== 6. Rent trend chart =====
 
 // Trend data is an EXTRA: if this file fails, the rent check and map still work
 async function loadTrend() {
@@ -422,8 +339,12 @@ async function loadTrend() {
   }
 }
 
-// every year from 2021 to 2025, so missing years show as gaps
-const TREND_YEARS = [2021, 2022, 2023, 2024, 2025];
+// every year from FIRST_YEAR to LATEST_YEAR, so missing years show as gaps
+function trendYears() {
+  const years = [];
+  for (let year = FIRST_YEAR; year <= LATEST_YEAR; year++) years.push(year);
+  return years;
+}
 
 function showTrend(place, dwelling, bedrooms) {
   const section  = document.getElementById("trend");
@@ -431,7 +352,7 @@ function showTrend(place, dwelling, bedrooms) {
   const summary  = document.getElementById("trend-summary");
   const chartBox = document.querySelector(".trend-chart");
 
-  if (trend.length === 0) {           // trend.json did not load
+  if (trend.length === 0) {           // trend file did not load
     section.hidden = true;
     return;
   }
@@ -449,7 +370,7 @@ function showTrend(place, dwelling, bedrooms) {
   if (rows.length < 2) {              // need at least 2 years to show a change
     chartBox.hidden = true;
     summary.innerHTML = `<span class="trend-nodata">Not enough data for a trend.</span>
-      <span class="trend-sub">Fewer than 30 similar new leases each year in this postcode.</span>
+      <span class="trend-sub">Fewer than ${MIN_SAMPLE} similar new leases each year in this postcode.</span>
       <span class="trend-sub">Try another dwelling type or number of bedrooms.</span>`;
     if (trendChart) { trendChart.destroy(); trendChart = null; }
     return;
@@ -457,7 +378,8 @@ function showTrend(place, dwelling, bedrooms) {
   chartBox.hidden = false;
 
   // one value per year; null = fewer than 30 leases that year (a gap in the line)
-  const values = TREND_YEARS.map(year => {
+  const years  = trendYears();
+  const values = years.map(year => {
     const r = rows.find(row => Number(row.lodgement_year) === year);
     return r ? Number(r.median_rent) : null;
   });
@@ -470,14 +392,14 @@ function showTrend(place, dwelling, bedrooms) {
   const change = Math.round((last - first) / first * 100);
   const word = change > 0 ? `Up ${change}%` : change < 0 ? `Down ${Math.abs(change)}%` : "No change";
   summary.textContent =
-    `${word} from ${TREND_YEARS[firstIndex]} to ${TREND_YEARS[lastIndex]} (${formatMoney(first)} → ${formatMoney(last)})`;
+    `${word} from ${years[firstIndex]} to ${years[lastIndex]} (${formatMoney(first)} → ${formatMoney(last)})`;
 
   // draw the chart (remove the old one first)
   if (trendChart) trendChart.destroy();
   trendChart = new Chart(document.getElementById("trend-chart"), {
     type: "line",
     data: {
-      labels: TREND_YEARS.map(String),
+      labels: years.map(String),
       datasets: [{
         label: "Middle rent",
         data: values,
@@ -509,62 +431,37 @@ function showTrend(place, dwelling, bedrooms) {
   });
 }
 
-// ===== 7. Small helper functions =====
 
-// 1050 -> "$1,050"
-function formatMoney(amount) {
-  return "$" + Math.round(Number(amount)).toLocaleString("en-AU");
-}
-
-// "Studio" -> "Studio", "1" -> "1 bedroom", "2" -> "2 bedrooms"
-function bedroomText(group) {
-  if (group === "Studio") return "Studio";
-  if (group === "1") return "1 bedroom";
-  return group + " bedrooms";
-}
-
-// show the result card with a colour type
-function showResult(type, html) {
-  resultBox.className = "result-card " + type;
-  resultBox.innerHTML = html;
-  resultBox.hidden = false;
-}
-
-// ===== 8. When the button is clicked =====
+// ===== 7. When the button is clicked =====
 form.addEventListener("submit", function (event) {
   event.preventDefault();   // stop the page from reloading
 
   const place    = getSelectedPlace();
   const dwelling = dwellingSelect.value;
   const bedrooms = bedroomSelect.value;
-  const rent     = Number(rentInput.value);
+  const rent     = Math.round(Number(rentInput.value));
 
-  // 8a. Check the inputs
-  if (!place) {
-    showResult("error", "<p>Please choose a suburb or postcode from the list.</p>");
-    return;
-  }
-  if (!dwelling) {
-    showResult("error", "<p>Please choose a dwelling type.</p>");
-    return;
-  }
-  if (!bedrooms) {
-    showResult("error", "<p>Please choose the number of bedrooms.</p>");
-    return;
-  }
-  if (!rent || rent <= 0) {
-    showResult("error", "<p>Please enter your weekly rent.</p>");
+  // 7a. Check the inputs
+  let error = "";
+  if (!place)                error = "Please choose a suburb or postcode from the list.";
+  else if (!dwelling)        error = "Please choose a dwelling type.";
+  else if (!bedrooms)        error = "Please choose the number of bedrooms.";
+  else if (!rent || rent <= 0) error = "Please enter your weekly rent or budget.";
+  if (error) {
+    showResult("error", `<p>${error}</p>`);
+    nearbyBox.hidden = true;
     return;
   }
 
   const code = place.postcode;
 
-  // 8b. Find the matching row (like SQL: WHERE postcode = ... AND ...)
-  const row = benchmark.find(r =>
-    r.postcode === code &&
-    r.dwelling_type === dwelling &&
-    r.bedroom_group === bedrooms
-  );
+  // 7b. Find the matching row
+  const row = findBenchmark(code, dwelling, bedrooms);
+
+  // 7c. Nearby areas, map and trend (all work even if there is no data for this area)
+  lastSearch = { place, dwelling, bedrooms, rent, row };
+  showNearby();
+  showTrend(place, dwelling, bedrooms);
 
   // chose a postcode: list its suburbs. chose a suburb: say it is based on the postcode
   const subs = suburbsOf(code);
@@ -580,10 +477,6 @@ form.addEventListener("submit", function (event) {
     </div>
   `;
 
-  // 8c. Update the map and the trend chart (both work even if there is no data for this area)
-  showOnMap(place, row, dwelling, bedrooms);
-  showTrend(place, dwelling, bedrooms);
-
   if (!row) {
     showResult("nodata", `
       <p class="verdict">No data for this combination</p>
@@ -593,7 +486,7 @@ form.addEventListener("submit", function (event) {
     return;
   }
 
-  // 8d. Compare the rent
+  // 7d. Compare the rent
   const p25    = Number(row.p25_rent);
   const median = Number(row.median_rent);
   const p75    = Number(row.p75_rent);
@@ -613,17 +506,17 @@ form.addEventListener("submit", function (event) {
     position = "above";
   }
 
-  // 8e. Lowest / highest without extreme leases (P5 / P95): only when there are 30+ leases
+  // 7e. Lowest / highest without extreme leases (P5 / P95): only when there are 30+ leases
   const wideRange = (row.meets_min_sample === "Yes" && row.p05_rent != null)
     ? `<p class="wide-range">Lowest ${formatMoney(row.p05_rent)} · Highest ${formatMoney(row.p95_rent)} (excluding extremes)</p>`
     : "";
 
-  // 8f. Warning for small samples (fewer than 30 lodgements)
+  // 7f. Warning for small samples (fewer than 30 lodgements)
   const warning = row.meets_min_sample === "Yes"
     ? ""
     : `<p class="warning">⚠️ Only ${row.sample_size} lodgements – use as a rough guide</p>`;
 
-  // 8g. Show the result
+  // 7g. Show the result
   showResult(type, `
     <p class="verdict">${verdict}</p>
     ${areaLine}
@@ -639,13 +532,63 @@ form.addEventListener("submit", function (event) {
     </div>
     <p>Your rent of ${formatMoney(rent)} a week is <strong class="position">${position}</strong> the usual range.</p>
     ${wideRange}
-    <p class="sample">Compared with ${Number(row.sample_size).toLocaleString("en-AU")} similar new leases from 2025.</p>
+    <p class="sample">Compared with ${Number(row.sample_size).toLocaleString("en-AU")} similar new leases from ${LATEST_YEAR}.</p>
     ${warning}
+    ${rentalLinks(code, dwelling, bedrooms, rent)}
   `);
 });
 
+
+// ===== 8. Distance buttons and "Show 5 more" =====
+
+function setDistance(km) {
+  maxKm = km;
+  document.querySelectorAll("#distance-chips .chip").forEach(b =>
+    b.classList.toggle("active", Number(b.dataset.km) === km));
+  if (lastSearch) showNearby();
+}
+
+document.querySelectorAll("#distance-chips .chip").forEach(b =>
+  b.addEventListener("click", () => setDistance(Number(b.dataset.km))));
+
+showMoreButton.addEventListener("click", showMore);
+
+// the "10 km" button inside the no-result message
+messageBox.addEventListener("click", event => {
+  const b = event.target.closest(".link-button");
+  if (b) setDistance(Number(b.dataset.km));
+});
+
+
 // ===== 9. Start =====
-loadData();
+
+// a link like index.html?postcode=2160&type=House&bedrooms=3&rent=700 fills the search bar and checks
+function checkFromLink() {
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get("postcode");
+  if (!code || !allCodes.includes(code)) return;
+
+  choosePlace({ name: "", postcode: code });
+  if (params.get("type"))     dwellingSelect.value = params.get("type");
+  if (params.get("bedrooms")) bedroomSelect.value  = params.get("bedrooms");
+  if (params.get("rent"))     rentInput.value      = params.get("rent");
+  form.requestSubmit();
+}
+
+async function startPage() {
+  const ok = await loadCoreData();
+  if (!ok) {
+    checkButton.textContent = "Data failed to load";
+    return;
+  }
+  initMap();
+  checkButton.disabled = false;
+  checkButton.textContent = "Check my rent";
+  checkFromLink();
+}
+
+startPage();
 loadAreas();   // runs at the same time; the map works even if this one fails
 loadTrend();   // runs at the same time; the rent check works even if this one fails
+
 

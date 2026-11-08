@@ -27,40 +27,40 @@
     <section class="about-card">
       <h2>What RentWise does</h2>
       <p>RentWise compares your weekly rent with recent new leases in your postcode,
-         so you can see if your rent is lower than usual, about usual or higher than usual.
-         It also shows nearby areas on a map and how rents in your area have changed since 2021.</p>
+         so you can see if your rent is lower than usual, about usual or higher than usual.</p>
+      <p>It also shows nearby areas where similar homes may fit your rent or budget,
+         with links to current listings, and how rents in your area have changed since 2021.</p>
     </section>
 
     <!-- 2. How the numbers work -->
     <section class="about-card">
       <h2>How the numbers work</h2>
+      <p class="about-note">Every number compares new leases from 2025 with the same postcode,
+         home type and number of bedrooms.</p>
       <dl class="terms">
-        <dt>Similar leases</dt>
-        <dd>New leases in the same postcode, with the same dwelling type and number of bedrooms,
-            lodged in 2025.</dd>
-
         <dt>Middle rent</dt>
-        <dd>Half of similar new leases cost less than this, and half cost more (the median).</dd>
+        <dd>The typical rent: half of leases cost less, half cost more.</dd>
 
         <dt>Usual range</dt>
-        <dd>The middle half of similar new leases (from the 25th to the 75th percentile).
-            Your rent is "lower than usual" below this range and "higher than usual" above it.</dd>
+        <dd>Where the middle half of rents fall. Below it is "lower than usual", above it is "higher than usual".</dd>
 
         <dt>Lowest and highest</dt>
-        <dd>These leave out the cheapest 5% and the most expensive 5% of leases, because the true
-            lowest and highest are often unusual cases. For example, the true lowest rent for a
-            2-bedroom flat in Zetland in 2025 was $243 a week, while 95% of leases were $900 or more.</dd>
+        <dd>Leave out the cheapest and most expensive 5%, which are often unusual.</dd>
 
-        <dt>Fewer than 30 leases</dt>
-        <dd>Results based on fewer than 30 leases are shown with a warning, because a few unusual
-            homes can change the numbers a lot. In the trend chart, years with fewer than 30 leases
-            are not shown.</dd>
+        <dt>Good chance</dt>
+        <dd>The typical rent in that area fits your budget.</dd>
+
+        <dt>Possible</dt>
+        <dd>Only the cheaper places in that area fit your budget.</dd>
 
         <dt>Nearby areas</dt>
-        <dd>The 5 closest postcodes, within 50 km, that have at least 30 similar leases.</dd>
+        <dd>Other postcodes within 5 or 10 km, in a straight line (not travel time).</dd>
+
+        <dt>Fewer than 30 leases</dt>
+        <dd>Too few to be reliable, so they are shown with a warning or left out.</dd>
 
         <dt>Rent trend</dt>
-        <dd>One middle rent per year, calculated from all similar new leases in that year.</dd>
+        <dd>The middle rent for each year since 2021.</dd>
       </dl>
     </section>
 
@@ -76,6 +76,9 @@
             which is usually close to the start of the lease.</li>
         <li><strong>Not live listings.</strong> The condition, location and features of a home all
             affect its rent. A higher rent is not always unfair.</li>
+        <li><strong>Listing links.</strong> "Search rentals" opens realestate.com.au or Domain with your
+            postcode, home type and price already filled in. RentWise is not connected to these sites,
+            and their current prices may be different from the 2025 figures here.</li>
         <li><strong>Approximate boundaries.</strong> Postcode areas on the map are ABS approximations,
             not official Australia Post boundaries.</li>
       </ul>
@@ -86,8 +89,8 @@
       <h2>What the data shows</h2>
       <p class="about-note">From 1,510,130 new leases in NSW, 2021–2025.</p>
       <ul>
-        <li>The middle rent for flats in NSW rose <strong>52%</strong> from 2021 to 2025
-            ($460 → $700 a week). Houses rose 33%.</li>
+        <li>The middle rent for flats in NSW (all bedroom sizes) rose <strong>52%</strong> from
+            2021 to 2025 ($460 → $700 a week). Houses rose 33%.</li>
         <li>Six of the ten postcodes with the biggest rise for 2-bedroom flats are near a university.
             In Kingsford (2032), the middle rent went from $450 to $850.
             <span class="about-note">Possible reason: international students returning after
@@ -111,8 +114,13 @@
             <a href="https://www.abs.gov.au/statistics/standards/australian-statistical-geography-standard-asgs/edition-4-july-2026-june-2031/non-abs-structures/postal-areas" target="_blank" rel="noopener">Australian Bureau of Statistics, Postal Areas, ASGS Edition 4 (2026)</a>
             (CC BY 4.0)</li>
         <li><strong>Map:</strong>
-            <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a></li>
+            <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a>,
+            available under the Open Database License (ODbL)</li>
       </ul>
+      <p class="about-note" style="margin-top: 12px;">
+        RentWise has cleaned and summarised the rent data, and simplified the postcode boundaries.
+        The original publishers do not endorse this site.
+      </p>
     </section>
 
     <!-- 6. About this project -->
@@ -128,13 +136,6 @@
         <a href="https://github.com/Isla-HsiaoTing-Shen/rentwise-website" target="_blank" rel="noopener">Website code (GitHub)</a>
       </p>
     </section>
-
-    <!-- 7. Disclaimer -->
-    <section class="about-card disclaimer">
-      <p><strong>This is a guide only, not financial or legal advice.</strong></p>
-    </section>
-
-    <p class="back-link"><a href="index.html">← Check my rent</a></p>
   </main>
 
   <!-- Footer (same as index.html) -->
@@ -145,3 +146,4 @@
 
 </body>
 </html>
+

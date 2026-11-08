@@ -13,7 +13,7 @@
   <header class="site-header">
     <a href="index.html" class="logo">RentWise</a>
     <nav>
-      <a href="index.html">Check my rent</a>
+      <a href="index.html" aria-current="page">Check my rent</a>
       <a href="about.html">About</a>
     </nav>
   </header>
@@ -58,15 +58,15 @@
       <div class="field">
         <label for="rent-input">Weekly rent</label>
         <input id="rent-input" type="number" min="1" step="1"
-               inputmode="numeric" placeholder="Enter your rent">
+               inputmode="numeric" placeholder="Your rent or budget">
       </div>
 
-      <button type="submit" id="check-button" disabled>Loading data…</button>
+      <button type="submit" id="check-button" class="search-button" disabled>Loading data…</button>
     </form>
 
-    <!-- Results (left) + Map (right) -->
+    <!-- Result card (left top) + map (right) + nearby areas (left bottom) -->
     <div class="results-layout">
-      <section class="results-column">
+      <section class="result-area">
         <div id="result" class="result-card" hidden></div>
       </section>
 
@@ -74,10 +74,35 @@
         <div id="map"></div>
         <div class="map-legend">
           <span><span class="dot dot-home"></span>Your area</span>
-          <span><span class="dot dot-nearby"></span>Nearby areas</span>
-          <span class="map-tip">Click a blue area to check it</span>
+          <span><span class="dot dot-good"></span>Good chance</span>
+          <span><span class="dot dot-possible"></span>Possible</span>
         </div>
         <p id="map-note" class="map-note" hidden></p>
+      </section>
+
+      <!-- Nearby areas that fit the rent / budget -->
+      <section id="nearby" class="nearby" hidden>
+        <h2 id="find-count" class="find-count"></h2>
+
+        <div class="chip-group" id="distance-chips" role="group" aria-label="Distance">
+          <span class="chip-label">Within</span>
+          <button type="button" class="chip active" data-km="5">5 km</button>
+          <button type="button" class="chip" data-km="10">10 km</button>
+        </div>
+
+        <p class="find-legend">
+          <span><span class="badge good">Good chance</span> Typical rent here fits your budget</span>
+          <span><span class="badge possible">Possible</span> Only the cheaper places here fit your budget</span>
+        </p>
+
+        <div id="find-message" class="find-message" hidden></div>
+        <ol id="find-list" class="find-list"></ol>
+        <button type="button" id="show-more" class="show-more" hidden>Show 5 more</button>
+
+        <p class="find-notes">
+          Based on <span class="latest-year"></span> new leases, not current listings.
+          RentWise is not connected to Realestate or Domain.
+        </p>
       </section>
     </div>
 
@@ -98,6 +123,8 @@
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <script src="js/common.js"></script>
   <script src="js/check.js"></script>
 </body>
 </html>
+
