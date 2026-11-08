@@ -220,13 +220,13 @@ main {
   font-size: 0.9rem;
 }
 
-/* colours for each result: border, title and above/within/below */
+/* colours for each result: border and title */
 .result-card.lower   { border-left-color: var(--lower); }
 .result-card.typical { border-left-color: var(--typical); }
 .result-card.higher  { border-left-color: var(--higher); }
-.result-card.lower   .verdict, .result-card.lower   .position { color: var(--lower); }
-.result-card.typical .verdict, .result-card.typical .position { color: var(--typical); }
-.result-card.higher  .verdict, .result-card.higher  .position { color: var(--higher); }
+.result-card.lower   .verdict { color: var(--lower); }
+.result-card.typical .verdict { color: var(--typical); }
+.result-card.higher  .verdict { color: var(--higher); }
 
 
 /* ========== 7. "Where" search list ========== */
@@ -386,8 +386,9 @@ main {
 }
 .find-message p { margin: 0; }
 
-/* title above the list: "7 other areas within 5 km may fit $700 a week" */
-.find-count { margin: 0; font-size: 1.1rem; font-weight: 700; }
+/* title "Nearby areas in your budget" + grey line "7 other areas within 5 km may fit $700 a week" */
+.nearby-head h2 { margin: 0 0 4px; font-size: 1.25rem; }   /* same size as "Middle rent trend" */
+.find-count     { margin: 0; color: var(--muted); font-size: 0.9rem; }
 
 /* "Good chance … Possible …" explanation above the list */
 .find-legend {
@@ -517,5 +518,4 @@ footer p { margin: 4px 0; }
   /* map legend: let the items wrap neatly */
   .map-legend { flex-wrap: wrap; gap: 4px 16px; }
 }
-
 

@@ -101,6 +101,12 @@ function shortSuburbs(code) {
   return subs.slice(0, 3).join(", ") + (subs.length > 3 ? ", …" : "");
 }
 
+// "2347" -> "New England and North West" (the ABS region in postcodes.json, or "")
+function regionOf(code) {
+  const info = postcodes.find(p => p.postcode === code);
+  return info && info.region ? info.region : "";
+}
+
 // 1050 -> "$1,050"
 function formatMoney(amount) {
   return "$" + Math.round(Number(amount)).toLocaleString("en-AU");
@@ -185,11 +191,19 @@ function showSuggestions() {
     suggestionsBox.appendChild(li);
   }
 
+  // names that appear more than once (e.g. 3 different "Red Hill"s) also show their region
+  const nameCount = {};
+  for (const p of results) if (p.name) nameCount[p.name] = (nameCount[p.name] || 0) + 1;
+
   for (const place of results) {
     const li = document.createElement("li");
     if (place.name) {
+      const region = nameCount[place.name] > 1 ? regionOf(place.postcode) : "";
       li.innerHTML = `
-        <span>📍 ${place.name}</span>
+        <div class="s-main">
+          <span>📍 ${place.name}</span>
+          ${region ? `<span class="s-sub">${region}</span>` : ""}
+        </div>
         <span class="s-code">${place.postcode}</span>
       `;
     } else {
@@ -228,6 +242,7 @@ document.addEventListener("click", (event) => {
 });
 
 // if the user typed without clicking the list, try to understand it
+// returns a place, or null if we cannot tell which place they mean
 function getSelectedPlace() {
   if (selectedPlace) return selectedPlace;
 
@@ -237,9 +252,19 @@ function getSelectedPlace() {
   if (/^\d{4}$/.test(text) && allCodes.includes(text)) {
     return { name: "", postcode: text };
   }
-  return places.find(p =>
-    p.name.toLowerCase() === text || placeLabel(p).toLowerCase() === text
-  ) || null;
+
+  // "Red Hill, 2347" is exact; plain "Red Hill" is only OK if there is ONE Red Hill
+  const exact = places.find(p => placeLabel(p).toLowerCase() === text);
+  if (exact) return exact;
+  const sameName = places.filter(p => p.name.toLowerCase() === text);
+  const codes = new Set(sameName.map(p => p.postcode));
+  return codes.size === 1 ? sameName[0] : null;
+}
+
+// how many different postcodes have a suburb with exactly this name ("red hill" -> 3)
+function countPlacesNamed(text) {
+  const t = text.trim().toLowerCase();
+  return new Set(places.filter(p => p.name.toLowerCase() === t).map(p => p.postcode)).size;
 }
 
 
@@ -356,6 +381,5 @@ function popupHtml(title, row, extra) {
     ${extra ? `<br><span class="hover-extra">${extra}</span>` : ""}
   `;
 }
-
 
 

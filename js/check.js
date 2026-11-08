@@ -443,7 +443,12 @@ form.addEventListener("submit", function (event) {
 
   // 7a. Check the inputs
   let error = "";
-  if (!place)                error = "Please choose a suburb or postcode from the list.";
+  const sameName = countPlacesNamed(postcodeInput.value);
+  if (!place && sameName > 1) {
+    error = `There are ${sameName} places called ${postcodeInput.value.trim()}. Please choose one from the list.`;
+    showSuggestions();         // open the list so they can pick
+  }
+  else if (!place)           error = "Please choose a suburb or postcode from the list.";
   else if (!dwelling)        error = "Please choose a dwelling type.";
   else if (!bedrooms)        error = "Please choose the number of bedrooms.";
   else if (!rent || rent <= 0) error = "Please enter your weekly rent or budget.";
@@ -491,19 +496,17 @@ form.addEventListener("submit", function (event) {
   const median = Number(row.median_rent);
   const p75    = Number(row.p75_rent);
 
-  let verdict, type, position;
+  // "$650 a week is higher than usual" (works for a rent you pay AND a budget)
+  let verdict, type;
   if (rent < p25) {
-    verdict  = "Lower than usual";
-    type     = "lower";
-    position = "below";
+    verdict = "lower than usual";
+    type    = "lower";
   } else if (rent <= p75) {
-    verdict  = "About usual";
-    type     = "typical";
-    position = "within";
+    verdict = "about usual";
+    type    = "typical";
   } else {
-    verdict  = "Higher than usual";
-    type     = "higher";
-    position = "above";
+    verdict = "higher than usual";
+    type    = "higher";
   }
 
   // 7e. Lowest / highest without extreme leases (P5 / P95): only when there are 30+ leases
@@ -518,7 +521,7 @@ form.addEventListener("submit", function (event) {
 
   // 7g. Show the result
   showResult(type, `
-    <p class="verdict">${verdict}</p>
+    <p class="verdict">${formatMoney(rent)} a week is ${verdict}</p>
     ${areaLine}
     <div class="stats">
       <div>
@@ -530,7 +533,6 @@ form.addEventListener("submit", function (event) {
         <strong>${formatMoney(median)}</strong>
       </div>
     </div>
-    <p>Your rent of ${formatMoney(rent)} a week is <strong class="position">${position}</strong> the usual range.</p>
     ${wideRange}
     <p class="sample">Compared with ${Number(row.sample_size).toLocaleString("en-AU")} similar new leases from ${LATEST_YEAR}.</p>
     ${warning}

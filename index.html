@@ -4,6 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>RentWise – Is your rent fair?</title>
+
+  <!-- what Google and LinkedIn show when the link is shared -->
+  <meta name="description" content="Check if your NSW rent is fair. Compare it with 2025 new leases in your area, and find nearby areas that may fit your budget.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://rentwise-xi.vercel.app/">
+  <meta property="og:title" content="RentWise – Is your rent fair?">
+  <meta property="og:description" content="Check if your NSW rent is fair. Compare it with 2025 new leases in your area, and find nearby areas that may fit your budget.">
+  <meta property="og:image" content="https://rentwise-xi.vercel.app/og-image.png">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="style.css">
 </head>
@@ -82,7 +90,10 @@
 
       <!-- Nearby areas that fit the rent / budget -->
       <section id="nearby" class="nearby" hidden>
-        <h2 id="find-count" class="find-count"></h2>
+        <div class="nearby-head">
+          <h2>Nearby areas in your budget</h2>
+          <p id="find-count" class="find-count"></p>
+        </div>
 
         <div class="chip-group" id="distance-chips" role="group" aria-label="Distance">
           <span class="chip-label">Within</span>
