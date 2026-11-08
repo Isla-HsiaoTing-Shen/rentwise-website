@@ -299,7 +299,6 @@ footer p { margin: 4px 0; }
 .price-label::before { display: none; }   /* hide Leaflet's little arrow */
 .price-label.home { background: #ea580c; border-color: #ea580c; color: white; }
 
-.popup-sub { color: var(--muted); font-size: 0.8rem; }
 
 /* legend + note under the map */
 .map-legend { display: flex; gap: 16px; margin-top: 8px; font-size: 0.85rem; color: var(--muted); }
@@ -314,3 +313,7 @@ footer p { margin: 4px 0; }
 
 
 .wide-range { color: var(--muted); font-size: 0.9rem; }
+.map-tip { margin-left: auto; font-style: italic; }
+
+/* text under the numbers when hovering a map area */
+.hover-extra { color: var(--muted); font-size: 0.8rem; }

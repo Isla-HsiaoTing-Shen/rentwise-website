@@ -243,7 +243,7 @@ function distanceKm(lat1, lng1, lat2, lng2) {
 }
 
 function initMap() {
-  map = L.map("map", { scrollWheelZoom: false });   // page scrolling won't zoom the map
+  map = L.map("map", { scrollWheelZoom: true });    // mouse wheel zooms the map
   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 18,
     attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors' +
@@ -269,13 +269,36 @@ function initMap() {
 }
 
 // colour one postcode area on the map (returns the layer, or null if we have no shape)
-function drawArea(code, colour, fillOpacity) {
+// infoHtml: text to show when the mouse is over the area
+// onClick:  what to do when the area is clicked (leave it out = not clickable)
+function drawArea(code, colour, fillOpacity, infoHtml, onClick) {
   const shape = areaShapes[code];
   if (!shape) return null;
-  return L.geoJSON(shape, {
-    interactive: false,     // clicks go through to the dots
+  const layer = L.geoJSON(shape, {
     style: { color: colour, weight: 2, opacity: 0.8, fillColor: colour, fillOpacity: fillOpacity }
   }).addTo(resultLayer);
+  layer.bindTooltip(infoHtml, { sticky: true, className: "hover-info" });   // follows the mouse
+  if (onClick) layer.on("click", onClick);
+  return layer;
+}
+
+// dots already have a price label, so show the info as a popup while the mouse is over them
+function showInfoOnHover(marker, infoHtml) {
+  marker.bindPopup(infoHtml, { closeButton: false, autoPan: false, offset: [0, -6] });
+  marker.on("mouseover", () => marker.openPopup());
+  marker.on("mouseout",  () => marker.closePopup());
+}
+
+// clicked a blue area: put that postcode in "Where" and check again
+// (dwelling type, bedrooms and rent stay the same)
+function checkArea(code) {
+  choosePlace({ name: "", postcode: code });
+  form.requestSubmit();
+
+  // on phones the card is above the map, so scroll up to show the new result
+  if (window.innerWidth <= 768) {
+    resultBox.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 }
 
 // the 5 closest areas (from the orange dot) with the same dwelling + bedrooms and 30+ leases
@@ -296,14 +319,13 @@ function findNearby(home, code, dwelling, bedrooms) {
     .slice(0, NEARBY_COUNT);
 }
 
-// the small window when you click a dot
-function popupHtml(title, subtitle, row, extra) {
+// the info shown on the map (short: the card has the details)
+function popupHtml(title, row, extra) {
   return `
     <strong>${title}</strong>
-    ${subtitle ? `<br><span class="popup-sub">${subtitle}</span>` : ""}
     <br>Middle rent ${formatMoney(row.median_rent)}
     <br>Usual range ${formatMoney(row.p25_rent)} – ${formatMoney(row.p75_rent)}
-    <br><span class="popup-sub">${extra}</span>
+    ${extra ? `<br><span class="hover-extra">${extra}</span>` : ""}
   `;
 }
 
@@ -321,28 +343,31 @@ function showOnMap(place, row, dwelling, bedrooms) {
 
   const nearby = findNearby(home, place.postcode, dwelling, bedrooms);
 
+  // info shown when the mouse is over your area
+  const homeInfo = row
+    ? popupHtml(`Your area: ${placeLabel(place)}`, row)
+    : `<strong>${placeLabel(place)}</strong><br>No data for this combination`;
+
   // 1. areas first, so the dots sit on top of them
   for (const n of nearby) {
-    drawArea(n.row.postcode, BLUE, 0.08);           // light blue: nearby postcodes
+    // light blue: nearby postcodes (hover = info, click = check this area)
+    const info = popupHtml(`Postcode ${n.row.postcode}`, n.row, `${n.km.toFixed(1)} km away`);
+    drawArea(n.row.postcode, BLUE, 0.08, info, () => checkArea(n.row.postcode));
   }
-  const homeArea = drawArea(place.postcode, ORANGE, 0.2);   // light orange: your postcode
+  const homeArea = drawArea(place.postcode, ORANGE, 0.2, homeInfo);   // light orange: your postcode
 
-  // 2. blue dots: nearby areas, with the price always showing
+  // 2. blue dots: nearby areas, with the price always showing (hover = info, click = check this area)
   const bounds = L.latLngBounds([[home.lat, home.lng]]);
   for (const n of nearby) {
-    L.circleMarker([n.coords.lat, n.coords.lng], {
+    const dot = L.circleMarker([n.coords.lat, n.coords.lng], {
       radius: 8, color: "white", weight: 2, fillColor: BLUE, fillOpacity: 1
     })
       .bindTooltip(formatMoney(n.row.median_rent), {
         permanent: true, direction: "top", offset: [0, -8], className: "price-label"
       })
-      .bindPopup(popupHtml(
-        `Postcode ${n.row.postcode}`,
-        shortSuburbs(n.row.postcode),
-        n.row,
-        `${n.km.toFixed(1)} km away · ${Number(n.row.sample_size).toLocaleString("en-AU")} new leases`
-      ))
+      .on("click", () => checkArea(n.row.postcode))
       .addTo(resultLayer);
+    showInfoOnHover(dot, popupHtml(`Postcode ${n.row.postcode}`, n.row, `${n.km.toFixed(1)} km away`));
     bounds.extend([n.coords.lat, n.coords.lng]);
   }
 
@@ -352,19 +377,11 @@ function showOnMap(place, row, dwelling, bedrooms) {
   }).addTo(resultLayer);
 
   if (row) {
-    homeMarker
-      .bindTooltip(formatMoney(row.median_rent), {
-        permanent: true, direction: "top", offset: [0, -10], className: "price-label home"
-      })
-      .bindPopup(popupHtml(
-        `Your area: ${placeLabel(place)}`,
-        place.name ? `Based on postcode ${place.postcode}` : shortSuburbs(place.postcode),
-        row,
-        `${Number(row.sample_size).toLocaleString("en-AU")} new leases`
-      ));
-  } else {
-    homeMarker.bindPopup(`<strong>${placeLabel(place)}</strong><br>No data for this combination`);
+    homeMarker.bindTooltip(formatMoney(row.median_rent), {
+      permanent: true, direction: "top", offset: [0, -10], className: "price-label home"
+    });
   }
+  showInfoOnHover(homeMarker, homeInfo);
 
   // 4. zoom so your whole postcode + all blue dots fit
   if (homeArea) bounds.extend(homeArea.getBounds());
@@ -512,4 +529,3 @@ form.addEventListener("submit", function (event) {
 // ===== 9. Start =====
 loadData();
 loadAreas();   // runs at the same time; the map works even if this one fails
-
