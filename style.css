@@ -335,3 +335,7 @@ footer p { margin: 4px 0; }
 @media (max-width: 768px) {
   .trend-chart { height: 240px; }
 }
+
+.trend-summary .trend-sub { font-weight: 400; display: block; }
+.trend-summary .trend-sub:first-of-type { margin-top: 4px; }
+.trend-nodata { display: block; color: #92400e; }

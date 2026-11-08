@@ -81,6 +81,7 @@ async function loadAreas() {
       areaShapes[feature.properties.postcode] = feature;
     }
     console.log("Loaded", Object.keys(areaShapes).length, "postcode areas");
+    if (greyLayer) drawGreyDots();   // map already drawn: move the grey dots inside their areas
   } catch (error) {
     console.warn("Postcode areas not loaded – the map will show dots only.", error);
   }
@@ -219,7 +220,13 @@ function getSelectedPlace() {
 // ===== 6. Map =====
 
 // postcode point: "2142" -> { lat, lng } (or null)
+// 1st choice: a point that is always INSIDE the postcode area (from postcode_areas.geojson)
+// 2nd choice: the point in postcodes.json (can be outside, e.g. 2000 is in the harbour)
 function getCoords(code) {
+  const shape = areaShapes[code];
+  if (shape && shape.properties.lat != null) {
+    return { lat: shape.properties.lat, lng: shape.properties.lng };
+  }
   const info = postcodes.find(p => p.postcode === code);
   if (!info || info.latitude == null || info.longitude == null) return null;
   return { lat: Number(info.latitude), lng: Number(info.longitude) };
@@ -256,8 +263,13 @@ function initMap() {
 
   greyLayer   = L.layerGroup().addTo(map);
   resultLayer = L.layerGroup().addTo(map);
+  drawGreyDots();
+}
 
-  // one small grey dot for every postcode; click = choose it
+// one small grey dot for every postcode; click = choose it
+// (drawn again when postcode_areas.geojson arrives, so the dots sit inside their areas)
+function drawGreyDots() {
+  greyLayer.clearLayers();
   for (const p of postcodes) {
     const coords = getCoords(p.postcode);
     if (!coords) continue;
@@ -425,8 +437,7 @@ function showTrend(place, dwelling, bedrooms) {
   }
 
   section.hidden = false;
-  const basedOn = place.name ? ` · based on postcode ${place.postcode}` : "";
-  titleEl.textContent = `${placeLabel(place)} · ${dwelling} · ${bedroomText(bedrooms)}${basedOn}`;
+  titleEl.textContent = `${placeLabel(place)} · ${dwelling} · ${bedroomText(bedrooms)}`;
 
   // like SQL: WHERE postcode = ... AND dwelling_type = ... AND bedroom_group = ...
   const rows = trend.filter(r =>
@@ -437,7 +448,9 @@ function showTrend(place, dwelling, bedrooms) {
 
   if (rows.length < 2) {              // need at least 2 years to show a change
     chartBox.hidden = true;
-    summary.textContent = "Not enough data for a trend in this area.";
+    summary.innerHTML = `<span class="trend-nodata">Not enough data for a trend.</span>
+      <span class="trend-sub">Fewer than 30 similar new leases each year in this postcode.</span>
+      <span class="trend-sub">Try another dwelling type or number of bedrooms.</span>`;
     if (trendChart) { trendChart.destroy(); trendChart = null; }
     return;
   }
@@ -556,13 +569,14 @@ form.addEventListener("submit", function (event) {
   // chose a postcode: list its suburbs. chose a suburb: say it is based on the postcode
   const subs = suburbsOf(code);
   const includesLine = (!place.name && subs.length) ? `<div>Includes ${subs.join(", ")}</div>` : "";
-  const basedOn      = place.name ? ` · based on postcode ${code}` : "";
+  const basedOn      = place.name ? `Based on postcode ${code}` : "";
 
+  // bold: "Postcode 2000 · House · 2 bedrooms"; grey underneath: suburbs or "Based on postcode"
   const areaLine = `
     <div class="area">
-      <strong class="area-name">${placeLabel(place)}</strong>
+      <strong class="area-name">${placeLabel(place)} · ${dwelling} · ${bedroomText(bedrooms)}</strong>
       ${includesLine}
-      <div>${dwelling} · ${bedroomText(bedrooms)}${basedOn}</div>
+      ${basedOn ? `<div>${basedOn}</div>` : ""}
     </div>
   `;
 
@@ -634,3 +648,4 @@ form.addEventListener("submit", function (event) {
 loadData();
 loadAreas();   // runs at the same time; the map works even if this one fails
 loadTrend();   // runs at the same time; the rent check works even if this one fails
+
