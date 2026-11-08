@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>About RentWise</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <!-- Header (same as index.html) -->
+  <header class="site-header">
+    <a href="index.html" class="logo">RentWise</a>
+    <nav>
+      <a href="index.html">Check my rent</a>
+      <a href="about.html" aria-current="page">About</a>
+    </nav>
+  </header>
+
+  <main class="about">
+    <section class="intro">
+      <h1>About RentWise</h1>
+      <p>How the numbers work, where they come from, and what to keep in mind</p>
+    </section>
+
+    <!-- 1. What RentWise does -->
+    <section class="about-card">
+      <h2>What RentWise does</h2>
+      <p>RentWise compares your weekly rent with recent new leases in your postcode,
+         so you can see if your rent is lower than usual, about usual or higher than usual.
+         It also shows nearby areas on a map and how rents in your area have changed since 2021.</p>
+    </section>
+
+    <!-- 2. How the numbers work -->
+    <section class="about-card">
+      <h2>How the numbers work</h2>
+      <dl class="terms">
+        <dt>Similar leases</dt>
+        <dd>New leases in the same postcode, with the same dwelling type and number of bedrooms,
+            lodged in 2025.</dd>
+
+        <dt>Middle rent</dt>
+        <dd>Half of similar new leases cost less than this, and half cost more (the median).</dd>
+
+        <dt>Usual range</dt>
+        <dd>The middle half of similar new leases (from the 25th to the 75th percentile).
+            Your rent is "lower than usual" below this range and "higher than usual" above it.</dd>
+
+        <dt>Lowest and highest</dt>
+        <dd>These leave out the cheapest 5% and the most expensive 5% of leases, because the true
+            lowest and highest are often unusual cases. For example, the true lowest rent for a
+            2-bedroom flat in Zetland in 2025 was $243 a week, while 95% of leases were $900 or more.</dd>
+
+        <dt>Fewer than 30 leases</dt>
+        <dd>Results based on fewer than 30 leases are shown with a warning, because a few unusual
+            homes can change the numbers a lot. In the trend chart, years with fewer than 30 leases
+            are not shown.</dd>
+
+        <dt>Nearby areas</dt>
+        <dd>The 5 closest postcodes, within 50 km, that have at least 30 similar leases.</dd>
+
+        <dt>Rent trend</dt>
+        <dd>One middle rent per year, calculated from all similar new leases in that year.</dd>
+      </dl>
+    </section>
+
+    <!-- 3. Things to keep in mind -->
+    <section class="about-card">
+      <h2>Things to keep in mind</h2>
+      <ul>
+        <li><strong>Only new leases.</strong> The data only includes new bonds. People who have rented
+            the same home for years often pay less.</li>
+        <li><strong>By postcode, not suburb.</strong> Rent data is published by postcode. Suburb names
+            help you find your postcode. All suburbs in the same postcode share the same figures.</li>
+        <li><strong>Lodgement dates.</strong> Dates are when the bond was lodged with NSW Fair Trading,
+            which is usually close to the start of the lease.</li>
+        <li><strong>Not live listings.</strong> The condition, location and features of a home all
+            affect its rent. A higher rent is not always unfair.</li>
+        <li><strong>Approximate boundaries.</strong> Postcode areas on the map are ABS approximations,
+            not official Australia Post boundaries.</li>
+      </ul>
+    </section>
+
+    <!-- 4. What the data shows -->
+    <section class="about-card">
+      <h2>What the data shows</h2>
+      <p class="about-note">From 1,510,130 new leases in NSW, 2021–2025.</p>
+      <ul>
+        <li>The middle rent for flats in NSW rose <strong>52%</strong> from 2021 to 2025
+            ($460 → $700 a week). Houses rose 33%.</li>
+        <li>Six of the ten postcodes with the biggest rise for 2-bedroom flats are near a university.
+            In Kingsford (2032), the middle rent went from $450 to $850.
+            <span class="about-note">Possible reason: international students returning after
+            COVID border closures.</span></li>
+        <li>Flat rents in Greater Sydney rose about twice as much as in the rest of NSW
+            (+56% vs +29%).</li>
+      </ul>
+    </section>
+
+    <!-- 5. Data sources -->
+    <section class="about-card">
+      <h2>Data sources</h2>
+      <ul>
+        <li><strong>Rents:</strong>
+            <a href="https://data.nsw.gov.au/data/dataset/rental-bond-lodgement" target="_blank" rel="noopener">NSW Fair Trading, Rental Bond Lodgements</a>,
+            2021–2025 (CC BY)</li>
+        <li><strong>Suburb names and locations:</strong>
+            <a href="https://matthewproctor.com/australian_postcodes" target="_blank" rel="noopener">Matthew Proctor, Australian Postcodes</a>
+            (provided without a guarantee of accuracy)</li>
+        <li><strong>Postcode boundaries:</strong>
+            <a href="https://www.abs.gov.au/statistics/standards/australian-statistical-geography-standard-asgs/edition-4-july-2026-june-2031/non-abs-structures/postal-areas" target="_blank" rel="noopener">Australian Bureau of Statistics, Postal Areas, ASGS Edition 4 (2026)</a>
+            (CC BY 4.0)</li>
+        <li><strong>Map:</strong>
+            <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap contributors</a></li>
+      </ul>
+    </section>
+
+    <!-- 6. About this project -->
+    <section class="about-card">
+      <h2>About this project</h2>
+      <p>Built by Isla Shen as a data analytics portfolio project.</p>
+      <p>I cleaned and analysed the data in SQL (Azure SQL) and Python, and designed what the
+         site shows and how it explains the numbers. The website code (HTML, CSS, JavaScript)
+         was written with help from Claude, an AI assistant.</p>
+      <p class="about-links">
+        <a href="https://isla-hsiaoting-shen.github.io" target="_blank" rel="noopener">Portfolio</a>
+        <a href="https://github.com/Isla-HsiaoTing-Shen/RentWise" target="_blank" rel="noopener">Data pipeline (GitHub)</a>
+        <a href="https://github.com/Isla-HsiaoTing-Shen/rentwise-website" target="_blank" rel="noopener">Website code (GitHub)</a>
+      </p>
+    </section>
+
+    <!-- 7. Disclaimer -->
+    <section class="about-card disclaimer">
+      <p><strong>This is a guide only, not financial or legal advice.</strong></p>
+    </section>
+
+    <p class="back-link"><a href="index.html">← Check my rent</a></p>
+  </main>
+
+  <!-- Footer (same as index.html) -->
+  <footer>
+    <p>Data: NSW Fair Trading rental bond lodgements, 2021–2025.</p>
+    <p>This is a guide only, not financial or legal advice.</p>
+  </footer>
+
+</body>
+</html>
