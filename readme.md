@@ -4,7 +4,8 @@
 
 **[Open the website →](https://rentwise-xi.vercel.app)**
 
-![RentWise result card and map](screenshot.png)
+![RentWise result card and map](screenshot-result.png)
+![Rents in the last 12 months chart](screenshot-chart.png)
 
 **The problem:** renters only see asking prices online, not what similar homes actually rent for. NSW publishes every new lease, but the data is hard to use. RentWise turns it into one simple check.
 
