@@ -47,8 +47,8 @@ const messageBox     = document.getElementById("find-message");
 const listBox        = document.getElementById("find-list");
 const showMoreButton = document.getElementById("show-more");
 
-let trend = [];            // trend_yearly.json: median rent per postcode per year (30+ leases)
-let trendChart = null;     // the Chart.js line chart
+let spread = [];           // rent_spread.json: leases per $50 of rent, latest 12 months (30+ leases)
+let spreadChart = null;    // the Chart.js bar chart
 
 let maxKm = 5;             // chosen distance (5 km when the page opens)
 let lastSearch = null;     // { place, dwelling, bedrooms, rent, row } so the distance buttons can redo it
@@ -56,7 +56,6 @@ let lastResults = [];      // every nearby area that fits, in list order
 let listLimit = LIST_STEP; // how many of them the list is showing
 let shownLayers = {};      // postcode -> { area, dot } on the map, to highlight from the list
 
-document.querySelectorAll(".latest-year").forEach(el => el.textContent = LATEST_YEAR);
 
 
 // ===== 3. Result card =====
@@ -325,109 +324,159 @@ function showMore() {
 }
 
 
-// ===== 6. Rent trend chart =====
+// ===== 6. "Where most rents fall" chart =====
+// A bar for each price band: how many new leases in the latest 12 months were in it.
+// Darker bars = the usual range (P25–P75). Orange line = the rent you entered.
+// Only the 5th–95th percentile is drawn (same as "Lowest · Highest" on the card),
+// so a few extreme leases do not squash the chart.
 
-// Trend data is an EXTRA: if this file fails, the rent check and map still work
-async function loadTrend() {
+// rent_spread.json is an EXTRA: if this file fails, the rent check and map still work
+async function loadSpread() {
   try {
-    const res = await fetch("data/trend_yearly.json");
-    if (!res.ok) throw new Error("Could not load trend_yearly.json");
-    trend = await res.json();
-    console.log("Loaded", trend.length, "trend rows");
+    const res = await fetch("data/rent_spread.json");
+    if (!res.ok) throw new Error("Could not load rent_spread.json");
+    spread = await res.json();
+    console.log("Loaded", spread.length, "rent spread rows");
   } catch (error) {
-    console.warn("Trend data not loaded – the trend chart will be hidden.", error);
+    console.warn("Rent spread not loaded – the chart will be hidden.", error);
   }
 }
 
-// every year from FIRST_YEAR to LATEST_YEAR, so missing years show as gaps
-function trendYears() {
-  const years = [];
-  for (let year = FIRST_YEAR; year <= LATEST_YEAR; year++) years.push(year);
-  return years;
+// $50 bands for a narrow range, wider bands when the range is wide (so about 20 bars at most)
+function bandWidth(lo, hi) {
+  const base = meta ? meta.bin_width : 50;
+  if (hi - lo <= 20 * base) return base;        // e.g. $450 – $750: $50 bands
+  if (hi - lo <= 40 * base) return base * 2;    // $100 bands
+  return base * 4;                              // $200 bands
 }
 
-function showTrend(place, dwelling, bedrooms) {
-  const section  = document.getElementById("trend");
-  const titleEl  = document.getElementById("trend-title");
-  const summary  = document.getElementById("trend-summary");
-  const chartBox = document.querySelector(".trend-chart");
+// draws the orange "You: $720" line on top of the bars
+const yourRentLine = {
+  id: "yourRentLine",
+  afterDatasetsDraw(chart, args, opts) {
+    if (opts.rent == null) return;
+    const { ctx, chartArea, scales: { x } } = chart;
+    const step  = x.getPixelForValue(1) - x.getPixelForValue(0) || chartArea.width;
+    const left  = x.getPixelForValue(0) - step / 2;                 // left edge of the first bar
+    const right = left + step * opts.bars;
+    let pos = left + (opts.rent - opts.lo) / opts.width * step;
+    let label = `You: ${formatMoney(opts.rent)}`;
+    if (pos < left)  { pos = left;  label = `← ${label}`; }        // cheaper than every bar
+    if (pos > right) { pos = right; label = `${label} →`; }        // dearer than every bar
 
-  if (trend.length === 0) {           // trend file did not load
+    ctx.save();
+    ctx.strokeStyle = ORANGE;
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 4]);
+    ctx.beginPath();
+    ctx.moveTo(pos, chartArea.top + 18);
+    ctx.lineTo(pos, chartArea.bottom);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = ORANGE;
+    ctx.font = "600 12px system-ui, sans-serif";
+    ctx.textAlign = pos > right - 60 ? "right" : pos < left + 60 ? "left" : "center";
+    ctx.fillText(label, pos, chartArea.top + 12);
+    ctx.restore();
+  }
+};
+
+function showSpread(place, dwelling, bedrooms, row, rent) {
+  const section  = document.getElementById("spread");
+  const titleEl  = document.getElementById("spread-title");
+  const summary  = document.getElementById("spread-summary");
+  const note     = document.getElementById("spread-note");
+  const chartBox = document.querySelector(".spread-chart");
+
+  if (spread.length === 0 || !row) {      // file did not load, or no data for this combination
     section.hidden = true;
     return;
   }
-
   section.hidden = false;
   titleEl.textContent = `${placeLabel(place)} · ${dwelling} · ${bedroomText(bedrooms)}`;
 
   // like SQL: WHERE postcode = ... AND dwelling_type = ... AND bedroom_group = ...
-  const rows = trend.filter(r =>
+  const found = spread.find(r =>
     r.postcode === place.postcode &&
     r.dwelling_type === dwelling &&
     r.bedroom_group === bedrooms
   );
 
-  if (rows.length < 2) {              // need at least 2 years to show a change
+  if (!found) {                           // fewer than 30 leases: no chart (BR-02)
     chartBox.hidden = true;
-    summary.innerHTML = `<span class="trend-nodata">Not enough data for a trend.</span>
-      <span class="trend-sub">Fewer than ${MIN_SAMPLE} similar new leases each year in this postcode.</span>
-      <span class="trend-sub">Try another dwelling type or number of bedrooms.</span>`;
-    if (trendChart) { trendChart.destroy(); trendChart = null; }
+    note.hidden = true;
+    summary.innerHTML = `<span class="trend-nodata">Not enough leases to show where rents fall.</span>
+      <span class="trend-sub">Fewer than ${MIN_SAMPLE} similar new leases in this postcode.</span>`;
+    if (spreadChart) { spreadChart.destroy(); spreadChart = null; }
     return;
   }
   chartBox.hidden = false;
+  note.hidden = false;
 
-  // one value per year; null = fewer than 30 leases that year (a gap in the line)
-  const years  = trendYears();
-  const values = years.map(year => {
-    const r = rows.find(row => Number(row.lodgement_year) === year);
-    return r ? Number(r.median_rent) : null;
-  });
+  // the bands to draw: from the P5 band to the P95 band
+  const base  = meta ? meta.bin_width : 50;
+  const lo0   = Math.floor(Number(row.p05_rent) / base) * base;
+  const hi0   = Math.floor(Number(row.p95_rent) / base) * base;
+  const width = bandWidth(lo0, hi0);
+  const lo    = Math.floor(lo0 / width) * width;
+  const bars  = Math.floor((hi0 - lo) / width) + 1;
 
-  // first and last years that have data
-  const firstIndex = values.findIndex(v => v !== null);
-  const lastIndex  = values.length - 1 - [...values].reverse().findIndex(v => v !== null);
-  const first = values[firstIndex];
-  const last  = values[lastIndex];
-  const change = Math.round((last - first) / first * 100);
-  const word = change > 0 ? `Up ${change}%` : change < 0 ? `Down ${Math.abs(change)}%` : "No change";
+  // add the $50 counts into the bands; leases outside P5–P95 are not drawn
+  const counts = new Array(bars).fill(0);
+  for (const [binStart, leases] of found.bins) {
+    const i = Math.floor((binStart - lo) / width);
+    if (i >= 0 && i < bars) counts[i] += leases;
+  }
+  const starts = counts.map((_, i) => lo + i * width);
+  const shown  = counts.reduce((a, b) => a + b, 0);
+
+  // darker = the band overlaps the usual range (P25–P75)
+  const p25 = Number(row.p25_rent), p75 = Number(row.p75_rent);
+  const colours = starts.map(s => (s < p75 && s + width > p25) ? "#0f766e" : "#cbd5e1");
+
+  // the band with the most leases
+  const top = counts.indexOf(Math.max(...counts));
   summary.textContent =
-    `${word} from ${years[firstIndex]} to ${years[lastIndex]} (${formatMoney(first)} → ${formatMoney(last)})`;
+    `Most common: ${formatMoney(starts[top])} – ${formatMoney(starts[top] + width - 1)} a week`;
+  note.textContent =
+    `${shown.toLocaleString("en-AU")} of ${Number(row.sample_size).toLocaleString("en-AU")} new leases, ${periodText}. ` +
+    `Darker bars = usual range. The most extreme leases are not shown.`;
 
   // draw the chart (remove the old one first)
-  if (trendChart) trendChart.destroy();
-  trendChart = new Chart(document.getElementById("trend-chart"), {
-    type: "line",
+  if (spreadChart) spreadChart.destroy();
+  spreadChart = new Chart(document.getElementById("spread-chart"), {
+    type: "bar",
     data: {
-      labels: years.map(String),
+      labels: starts.map(formatMoney),               // "$550", "$600", ...
       datasets: [{
-        label: "Middle rent",
-        data: values,
-        borderColor: ORANGE,
-        backgroundColor: ORANGE,
-        borderWidth: 2,
-        pointRadius: 4,
-        tension: 0.2,
-        spanGaps: false               // do not join across missing years
+        label: "New leases",
+        data: counts,
+        backgroundColor: colours,
+        borderRadius: 4,
+        categoryPercentage: 0.9,
+        barPercentage: 1
       }]
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      layout: { padding: { top: 8 } },
       plugins: {
         legend: { display: false },
         tooltip: {
           callbacks: {
-            title: items => items[0].label,                          // "2024"
-            label: item => `Middle rent ${formatMoney(item.raw)}`
+            title: items => `${formatMoney(starts[items[0].dataIndex])} – ${formatMoney(starts[items[0].dataIndex] + width - 1)} a week`,
+            label: item => `${item.raw} new lease${item.raw === 1 ? "" : "s"}`
           }
-        }
+        },
+        yourRentLine: { rent, lo, width, bars }
       },
       scales: {
-        x: { grid: { display: false } },
-        y: { ticks: { callback: value => formatMoney(value) } }
+        x: { grid: { display: false }, title: { display: true, text: "Weekly rent" } },
+        y: { beginAtZero: true, ticks: { precision: 0 }, title: { display: true, text: "New leases" } }
       }
-    }
+    },
+    plugins: [yourRentLine]
   });
 }
 
@@ -463,10 +512,10 @@ form.addEventListener("submit", function (event) {
   // 7b. Find the matching row
   const row = findBenchmark(code, dwelling, bedrooms);
 
-  // 7c. Nearby areas, map and trend (all work even if there is no data for this area)
+  // 7c. Nearby areas, map and "where most rents fall" (all work even if there is no data for this area)
   lastSearch = { place, dwelling, bedrooms, rent, row };
   showNearby();
-  showTrend(place, dwelling, bedrooms);
+  showSpread(place, dwelling, bedrooms, row, rent);
 
   // chose a postcode: list its suburbs. chose a suburb: say it is based on the postcode
   const subs = suburbsOf(code);
@@ -534,7 +583,7 @@ form.addEventListener("submit", function (event) {
       </div>
     </div>
     ${wideRange}
-    <p class="sample">Compared with ${Number(row.sample_size).toLocaleString("en-AU")} similar new leases from ${LATEST_YEAR}.</p>
+    <p class="sample">Compared with ${Number(row.sample_size).toLocaleString("en-AU")} similar new leases from ${periodText}.</p>
     ${warning}
     ${rentalLinks(code, dwelling, bedrooms, rent)}
   `);
@@ -591,6 +640,6 @@ async function startPage() {
 
 startPage();
 loadAreas();   // runs at the same time; the map works even if this one fails
-loadTrend();   // runs at the same time; the rent check works even if this one fails
+loadSpread();  // runs at the same time; the rent check works even if this one fails
 
 

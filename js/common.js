@@ -7,10 +7,8 @@
 
 // ===== 1. Settings (change these in one place) =====
 
-// Years in the data. When you add a new year of data, change LATEST_YEAR
-// (and the year text in the footer and on about.html).
-const FIRST_YEAR  = 2021;    // first year in the trend data
-const LATEST_YEAR = 2025;    // the year used for "similar new leases"
+// Dates are NOT set here: they come from data/meta.json, which export_for_web.py
+// writes every time the data is updated (the latest 12 months, e.g. Oct 2025 – Sep 2026).
 const MIN_SAMPLE  = 30;      // fewer leases than this = not reliable (BR-02)
 
 const NSW_BOUNDS = [[-37.6, 140.9], [-28.1, 153.7]];   // mainland NSW
@@ -23,7 +21,9 @@ const GREY   = "#6b7280";
 
 // ===== 2. Data (filled by loadCoreData and loadAreas) =====
 let postcodes  = [];       // postcodes.json: one row per postcode (595)
-let benchmark  = [];       // benchmark.json: rent figures for LATEST_YEAR (5,218)
+let benchmark  = [];       // benchmark.json: rent figures for the latest 12 months
+let meta       = null;     // meta.json: { period_start: "2025-10", period_end: "2026-09", trend_periods: [...] }
+let periodText = "";       // "Oct 2025 – Sep 2026", shown on the page
 let allCodes   = [];       // every postcode that has rent data (598)
 let places     = [];       // suburbs.json: one row per suburb (5,214)
 let areaShapes = {};       // postcode_areas.geojson: "2017" -> boundary shape (594)
@@ -34,19 +34,25 @@ let areaShapes = {};       // postcode_areas.geojson: "2017" -> boundary shape (
 // The files every page needs. Returns true if they loaded, false if not.
 async function loadCoreData() {
   try {
-    const [postcodeRes, benchmarkRes, suburbRes] = await Promise.all([
+    const [postcodeRes, benchmarkRes, suburbRes, metaRes] = await Promise.all([
       fetch("data/postcodes.json"),
       fetch("data/benchmark.json"),
-      fetch("data/suburbs.json")
+      fetch("data/suburbs.json"),
+      fetch("data/meta.json")
     ]);
 
-    if (!postcodeRes.ok || !benchmarkRes.ok || !suburbRes.ok) {
+    if (!postcodeRes.ok || !benchmarkRes.ok || !suburbRes.ok || !metaRes.ok) {
       throw new Error("Could not load the data files");
     }
 
     postcodes = await postcodeRes.json();
     benchmark = await benchmarkRes.json();
     const suburbs = await suburbRes.json();
+    meta = await metaRes.json();
+    periodText = `${monthText(meta.period_start)} – ${monthText(meta.period_end)}`;
+
+    // every <span class="data-period"> on the page shows "Oct 2025 – Sep 2026"
+    document.querySelectorAll(".data-period").forEach(el => el.textContent = periodText);
 
     allCodes = [...new Set(benchmark.map(row => row.postcode))].sort();
 
@@ -110,6 +116,13 @@ function regionOf(code) {
 // 1050 -> "$1,050"
 function formatMoney(amount) {
   return "$" + Math.round(Number(amount)).toLocaleString("en-AU");
+}
+
+// "2026-09" -> "Sep 2026"
+const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+function monthText(yyyymm) {
+  const [year, month] = yyyymm.split("-");
+  return `${MONTH_NAMES[Number(month) - 1]} ${year}`;
 }
 
 // "Studio" -> "Studio", "1" -> "1 bedroom", "2" -> "2 bedrooms"

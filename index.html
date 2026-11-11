@@ -6,11 +6,11 @@
   <title>RentWise – Is your rent fair?</title>
 
   <!-- what Google and LinkedIn show when the link is shared -->
-  <meta name="description" content="Check if your NSW rent is fair. Compare it with 2025 new leases in your area, and find nearby areas that may fit your budget.">
+  <meta name="description" content="Check if your NSW rent is fair. Compare it with the latest new leases in your area, and find nearby areas that may fit your budget.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://rentwise-xi.vercel.app/">
   <meta property="og:title" content="RentWise – Is your rent fair?">
-  <meta property="og:description" content="Check if your NSW rent is fair. Compare it with 2025 new leases in your area, and find nearby areas that may fit your budget.">
+  <meta property="og:description" content="Check if your NSW rent is fair. Compare it with the latest new leases in your area, and find nearby areas that may fit your budget.">
   <meta property="og:image" content="https://rentwise-xi.vercel.app/og-image.png">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
   <link rel="stylesheet" href="style.css">
@@ -111,24 +111,25 @@
         <button type="button" id="show-more" class="show-more" hidden>Show 5 more</button>
 
         <p class="find-notes">
-          Based on <span class="latest-year"></span> new leases, not current listings.
+          Based on new leases from <span class="data-period"></span>, not current listings.
           RentWise is not connected to Realestate or Domain.
         </p>
       </section>
     </div>
 
-    <!-- Rent trend -->
-    <section class="trend" id="trend" hidden>
-      <h2>Middle rent trend</h2>
-      <p id="trend-title" class="trend-sub"></p>
-      <div class="trend-chart"><canvas id="trend-chart"></canvas></div>
-      <p id="trend-summary" class="trend-summary"></p>
+    <!-- Where most rents fall (latest 12 months) -->
+    <section class="trend" id="spread" hidden>
+      <h2>Where most rents fall</h2>
+      <p id="spread-title" class="trend-sub"></p>
+      <div class="trend-chart spread-chart"><canvas id="spread-chart"></canvas></div>
+      <p id="spread-summary" class="trend-summary"></p>
+      <p id="spread-note" class="trend-note"></p>
     </section>
   </main>
 
   <!-- Footer -->
   <footer>
-    <p>Data: NSW Fair Trading rental bond lodgements, 2021–2025.</p>
+    <p>Data: NSW Fair Trading rental bond lodgements, updated every 3 months.</p>
     <p>This is a guide only, not financial or legal advice.</p>
   </footer>
 
@@ -138,4 +139,5 @@
   <script src="js/check.js"></script>
 </body>
 </html>
+
 

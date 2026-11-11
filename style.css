@@ -322,6 +322,7 @@ main {
 .trend-sub     { margin: 0; color: var(--muted); font-size: 0.9rem; }
 .trend-chart   { position: relative; height: 300px; margin: 16px 0 8px; }
 .trend-summary { margin: 0; font-weight: 600; }
+.trend-note    { margin: 4px 0 0; color: var(--muted); font-size: 0.8rem; }
 
 /* "Not enough data for a trend." + two grey lines underneath */
 .trend-nodata { display: block; color: var(--notice); }
