@@ -324,7 +324,7 @@ function showMore() {
 }
 
 
-// ===== 6. "Where most rents fall" chart =====
+// ===== 6. "Rents in the last 12 months" chart =====
 // A bar for each price band: how many new leases in the latest 12 months were in it.
 // Darker bars = the usual range (P25–P75). Orange line = the rent you entered.
 // Only the 5th–95th percentile is drawn (same as "Lowest · Highest" on the card),
@@ -412,6 +412,7 @@ function showSpread(place, dwelling, bedrooms, row, rent) {
   }
   chartBox.hidden = false;
   note.hidden = false;
+  summary.innerHTML = "";
 
   // the bands to draw: from the P5 band to the P95 band
   const base  = meta ? meta.bin_width : 50;
@@ -428,19 +429,16 @@ function showSpread(place, dwelling, bedrooms, row, rent) {
     if (i >= 0 && i < bars) counts[i] += leases;
   }
   const starts = counts.map((_, i) => lo + i * width);
-  const shown  = counts.reduce((a, b) => a + b, 0);
 
   // darker = the band overlaps the usual range (P25–P75)
   const p25 = Number(row.p25_rent), p75 = Number(row.p75_rent);
   const colours = starts.map(s => (s < p75 && s + width > p25) ? "#0f766e" : "#cbd5e1");
 
-  // the band with the most leases
-  const top = counts.indexOf(Math.max(...counts));
-  summary.textContent =
-    `Most common: ${formatMoney(starts[top])} – ${formatMoney(starts[top] + width - 1)} a week`;
-  note.textContent =
-    `${shown.toLocaleString("en-AU")} of ${Number(row.sample_size).toLocaleString("en-AU")} new leases, ${periodText}. ` +
-    `Darker bars = usual range. The most extreme leases are not shown.`;
+  // legend under the chart: same words and numbers as the result card
+  note.innerHTML = `
+    <span><span class="swatch swatch-usual"></span>Usual range ${formatMoney(p25)} – ${formatMoney(p75)}</span>
+    <span><span class="swatch swatch-you"></span>Your rent ${formatMoney(rent)}</span>
+  `;
 
   // draw the chart (remove the old one first)
   if (spreadChart) spreadChart.destroy();
@@ -583,7 +581,6 @@ form.addEventListener("submit", function (event) {
       </div>
     </div>
     ${wideRange}
-    <p class="sample">Compared with ${Number(row.sample_size).toLocaleString("en-AU")} similar new leases from ${periodText}.</p>
     ${warning}
     ${rentalLinks(code, dwelling, bedrooms, rent)}
   `);
@@ -641,5 +638,3 @@ async function startPage() {
 startPage();
 loadAreas();   // runs at the same time; the map works even if this one fails
 loadSpread();  // runs at the same time; the rent check works even if this one fails
-
-

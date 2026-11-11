@@ -117,20 +117,20 @@
       </section>
     </div>
 
-    <!-- Where most rents fall (latest 12 months) -->
+    <!-- Rents in the last 12 months: how many leases at each price -->
     <section class="trend" id="spread" hidden>
-      <h2>Where most rents fall</h2>
+      <h2>Rents in the last 12 months <span class="h2-sub data-period"></span></h2>
       <p id="spread-title" class="trend-sub"></p>
       <div class="trend-chart spread-chart"><canvas id="spread-chart"></canvas></div>
       <p id="spread-summary" class="trend-summary"></p>
-      <p id="spread-note" class="trend-note"></p>
+      <p id="spread-note" class="chart-legend"></p>
     </section>
   </main>
 
   <!-- Footer -->
   <footer>
     <p>Data: NSW Fair Trading rental bond lodgements, updated every 3 months.</p>
-    <p>This is a guide only, not financial or legal advice.</p>
+    <p>A guide only, based on new leases in the same postcode. Not financial or legal advice.</p>
   </footer>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>

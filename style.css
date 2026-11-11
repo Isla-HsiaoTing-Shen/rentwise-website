@@ -319,10 +319,15 @@ main {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 .trend h2      { margin: 0 0 4px; font-size: 1.25rem; }
+.h2-sub        { margin-left: 6px; color: var(--muted); font-size: 0.9rem; font-weight: 400; }   /* "Oct 2025 – Sep 2026" after a title */
 .trend-sub     { margin: 0; color: var(--muted); font-size: 0.9rem; }
 .trend-chart   { position: relative; height: 300px; margin: 16px 0 8px; }
 .trend-summary { margin: 0; font-weight: 600; }
-.trend-note    { margin: 4px 0 0; color: var(--muted); font-size: 0.8rem; }
+/* legend under "Where most rents fall": same look as the map legend */
+.chart-legend { display: flex; flex-wrap: wrap; gap: 4px 20px; margin: 4px 0 0; font-size: 0.85rem; color: var(--muted); }
+.swatch       { display: inline-block; margin-right: 6px; vertical-align: middle; }
+.swatch-usual { width: 12px; height: 12px; border-radius: 3px; background: var(--brand); }
+.swatch-you   { width: 0; height: 14px; border-left: 2px dashed var(--map-home); }
 
 /* "Not enough data for a trend." + two grey lines underneath */
 .trend-nodata { display: block; color: var(--notice); }
@@ -519,4 +524,5 @@ footer p { margin: 4px 0; }
   /* map legend: let the items wrap neatly */
   .map-legend { flex-wrap: wrap; gap: 4px 16px; }
 }
+
 
